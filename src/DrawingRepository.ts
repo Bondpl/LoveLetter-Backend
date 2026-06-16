@@ -12,6 +12,8 @@ export class DrawingRepository {
     const message = {
       data: {
         type: "NEW_DRAWING",
+        title: "New Drawing",
+        body: "Your partner sent you a drawing!",
       },
       token: partnerDeviceToken,
     };
@@ -42,5 +44,22 @@ export class DrawingRepository {
       return result.rows[0].image_data;
     }
     return null;
+  }
+
+  async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO fcm_tokens(user_id, fcm_token, updated_at) 
+       VALUES($1, $2, NOW())
+       ON CONFLICT(user_id) DO UPDATE SET fcm_token = $2, updated_at = NOW()`,
+      [userId, fcmToken],
+    );
+  }
+
+  async getFCMToken(userId: string): Promise<string | null> {
+    const result = await this.pool.query(
+      `SELECT fcm_token FROM fcm_tokens WHERE user_id = $1`,
+      [userId],
+    );
+    return result.rows.length > 0 ? result.rows[0].fcm_token : null;
   }
 }

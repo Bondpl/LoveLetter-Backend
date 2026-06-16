@@ -13,6 +13,7 @@ initializeApp({
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
+app.use(express.json());
 app.use(express.raw({ type: "image/png", limit: "5mb" }));
 
 const requireAuth = (
@@ -35,6 +36,17 @@ app.post("/api/drawings", requireAuth, async (req: AuthRequest, res) => {
   try {
     const senderId = req.userId as string;
     await drawingRepo.saveDrawing(senderId, req.body);
+
+    const partnerUserId =
+      senderId === process.env.API_KEY1
+        ? process.env.API_KEY2
+        : process.env.API_KEY1;
+    const partnerToken = await drawingRepo.getFCMToken(partnerUserId as string);
+
+    if (partnerToken) {
+      await drawingRepo.notifyPartner(partnerToken);
+    }
+
     res.status(200).send("Drawing saved successfully");
   } catch (error) {
     console.error("Error saving drawing:", error);
@@ -56,6 +68,23 @@ app.get("/api/drawings", requireAuth, async (req: AuthRequest, res) => {
     }
   } catch (error) {
     console.error("Error fetching drawing:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.post("/api/fcm-token", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId as string;
+    const { token } = req.body as { token: string };
+
+    if (!token) {
+      return res.status(400).send("FCM token is required");
+    }
+
+    await drawingRepo.saveFCMToken(userId, token);
+    res.status(200).send("FCM token saved successfully");
+  } catch (error) {
+    console.error("Error saving FCM token:", error);
     res.status(500).send("Internal Server Error");
   }
 });
