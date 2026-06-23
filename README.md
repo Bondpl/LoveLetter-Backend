@@ -1,3 +1,3 @@
 # LoveLetter-Backend
 
-test
+tests
