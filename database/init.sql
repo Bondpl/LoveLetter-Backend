@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS drawings (
+    id SERIAL PRIMARY KEY,
+    sender_id VARCHAR(50) NOT NULL,
+    image_data BYTEA NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX idx_drawings_lookup ON drawings(sender_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS fcm_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL UNIQUE,
+    fcm_token TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
