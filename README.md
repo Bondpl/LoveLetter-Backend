@@ -164,3 +164,10 @@ To build and run the application container locally or in cloud providers:
    ```bash
    docker run -d -p 8080:8080 --env-file .env loveletter-backend
    ```
+
+---
+
+## Future Improvements
+
+- **Dynamic User Pairing (Multi-User Support)**: Transition from static paired API keys (`API_KEY1` and `API_KEY2`) to dynamic user pairing. Users will be able to generate unqiue invite codes (GUIDs) upon login and link accounts dynamically via code entry.
+- **Unit & Integration Testing**: Implement test suites for `DrawingService` and middleware using Jest / Supertest to ensure API contract stability.
