@@ -1,5 +1,9 @@
-import express from "express";
+import "express";
 
-export interface AuthRequest extends express.Request {
-  userId?: string;
+declare global {
+  namespace Express {
+    interface Request {
+      userId: string;
+    }
+  }
 }
