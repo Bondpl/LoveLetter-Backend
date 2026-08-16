@@ -171,3 +171,9 @@ To build and run the application container locally or in cloud providers:
 
 - **Dynamic User Pairing (Multi-User Support)**: Transition from static paired API keys (`API_KEY1` and `API_KEY2`) to dynamic user pairing. Users will be able to generate unqiue invite codes (GUIDs) upon login and link accounts dynamically via code entry.
 - **Unit & Integration Testing**: Implement test suites for `DrawingService` and middleware using Jest / Supertest to ensure API contract stability.
+
+
+## Architecture
+  <p align="center">        
+<img width="552" height="212" alt="Diagram drawio" src="https://github.com/user-attachments/assets/c3bac4c8-8d59-42be-b758-88893f8b4202" />
+  </p>
