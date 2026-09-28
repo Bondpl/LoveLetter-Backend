@@ -6,11 +6,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+const useSsl = process.env.DATABASE_URL?.includes("sslmode=");
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 
 pool.on("error", (err) => {

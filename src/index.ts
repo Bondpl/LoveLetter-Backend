@@ -8,17 +8,24 @@ import type { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
 import { NotificationService } from "./NotificationService";
 import { DrawingService } from "./DrawingService";
+import { AuthRepository } from "./AuthRepository";
+import { AuthService } from "./AuthService";
 
-if (!process.env.FIREBASE_CREDENTIALS) {
-  console.error("FIREBASE_CREDENTIALS environment variable is not set");
-  process.exit(1);
+if (process.env.FIREBASE_CREDENTIALS) {
+  try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    initializeApp({
+      credential: cert(serviceAccount),
+    });
+    console.log("✅ Firebase initialized successfully.");
+  } catch (error) {
+    console.error("Failed to parse or initialize FIREBASE_CREDENTIALS:", error);
+  }
+} else {
+  console.warn(
+    "FIREBASE_CREDENTIALS is not set. Running without Firebase notifications.",
+  );
 }
-
-const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-
-initializeApp({
-  credential: cert(serviceAccount),
-});
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
@@ -34,29 +41,48 @@ const drawingService = new DrawingService(
   notificationService,
 );
 
+const authRepository = new AuthRepository(pool);
+const authService = new AuthService(authRepository);
+
+app.post("/api/auth/anonymous", async (req, res) => {
+  try {
+    const result = await authService.createAnonymousUser();
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error creating anonymous user:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.post("/api/pairs/join", async (req, res) => {
+  try {
+    const { pairCode } = req.body ?? {};
+    if (!pairCode) {
+      return res.status(400).send("pairCode is required");
+    }
+
+    const result = await authService.joinPairWithCode(pairCode);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error joining pair:", error);
+    res.status(400).send(error.message || "Failed to join pair");
+  }
+});
+
 app.post("/api/drawings", requireAuth, async (req, res) => {
   try {
     const senderId = req.userId!;
-    const partnerUserId =
-      senderId === process.env.API_KEY1
-        ? process.env.API_KEY2
-        : process.env.API_KEY1;
-
-    if (!partnerUserId) {
-      return res.status(400).send("Partner API key is missing");
-    }
-
     const drawingBuffer = req.body;
 
-    await drawingService.addNewDrawing({
-      senderId,
-      drawingBuffer,
-      partnerUserId,
-    });
-    res.status(200).send("Drawing saved successfully");
-  } catch (error) {
+    if (!drawingBuffer || drawingBuffer.length === 0) {
+      return res.status(400).send("Drawing image buffer is required");
+    }
+
+    await drawingService.addNewDrawing(senderId, drawingBuffer);
+    res.status(200).send("Drawing saved successfully to S3 and database");
+  } catch (error: any) {
     console.error("Error saving drawing:", error);
-    res.status(500).send("Internal Server Error");
+    res.status(500).send(error.message || "Internal Server Error");
   }
 });
 
@@ -64,10 +90,9 @@ app.get("/api/drawings", requireAuth, async (req, res) => {
   try {
     const myUserId = req.userId!;
 
-    const newDrawing = await drawingService.getNewDrawing({ userId: myUserId });
-    if (newDrawing) {
-      res.setHeader("Content-Type", "image/png");
-      return res.status(200).send(newDrawing);
+    const drawingUrl = await drawingService.getNewDrawing(myUserId);
+    if (drawingUrl) {
+      return res.status(200).json({ drawingUrl });
     }
     res.status(404).send("No new drawings found");
   } catch (error) {

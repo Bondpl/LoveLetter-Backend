@@ -1,16 +1,25 @@
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fcm_token TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pairs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user1_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    user2_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    pair_code VARCHAR(10) UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS drawings (
     id SERIAL PRIMARY KEY,
-    sender_id VARCHAR(50) NOT NULL,
-    image_data BYTEA NOT NULL,
+    pair_id UUID NOT NULL REFERENCES pairs(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    image_url TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
-CREATE INDEX idx_drawings_lookup ON drawings(sender_id, expires_at);
-
-CREATE TABLE IF NOT EXISTS fcm_tokens (
-    id SERIAL PRIMARY KEY,
-    user_id VARCHAR(50) NOT NULL UNIQUE,
-    fcm_token TEXT NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+CREATE INDEX IF NOT EXISTS idx_drawings_cleanup ON drawings(pair_id, expires_at);

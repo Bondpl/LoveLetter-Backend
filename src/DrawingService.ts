@@ -1,40 +1,34 @@
 import { DrawingRepository } from "./DrawingRepository";
 import { NotificationService } from "./NotificationService";
+import { SaveFcmTokenInput } from "./types/requests";
 
-import {
-  GetNewDrawingRequest,
-  SaveFcmTokenInput,
-  SaveDrawingInput,
-} from "./types/requests";
 export class DrawingService {
   constructor(
     private drawingRepository: DrawingRepository,
     private notificationService: NotificationService,
   ) {}
 
-  async addNewDrawing(addNewDrawingRequest: SaveDrawingInput) {
-    await this.drawingRepository.saveDrawing(
-      addNewDrawingRequest.senderId,
-      addNewDrawingRequest.drawingBuffer,
-    );
+  async addNewDrawing(senderId: string, drawingBuffer: Buffer): Promise<void> {
+    await this.drawingRepository.saveDrawing(senderId, drawingBuffer);
 
-    const partnerToken = await this.drawingRepository.getFCMToken(
-      addNewDrawingRequest.partnerUserId,
-    );
-
-    if (partnerToken) {
-      await this.notificationService.notifyPartner(partnerToken);
+    const partnerId = await this.drawingRepository.getPartnerId(senderId);
+    if (partnerId) {
+      const partnerToken = await this.drawingRepository.getFCMToken(partnerId);
+      if (partnerToken) {
+        try {
+          await this.notificationService.notifyPartner(partnerToken);
+        } catch (err) {
+          console.warn("Could not send FCM notification to partner:", err);
+        }
+      }
     }
   }
 
-  async getNewDrawing(getNewDrawingRequest: GetNewDrawingRequest) {
-    const drawingBuffer = await this.drawingRepository.getLatestDrawing(
-      getNewDrawingRequest.userId,
-    );
-    return drawingBuffer;
+  async getNewDrawing(myUserId: string): Promise<string | null> {
+    return await this.drawingRepository.getLatestDrawing(myUserId);
   }
 
-  async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput) {
+  async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {
     if (!FcmTokenRequest.token) {
       throw new Error("FCM token is required");
     }

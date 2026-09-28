@@ -1,49 +1,123 @@
 import { Pool } from "pg";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export class DrawingRepository {
   private pool: Pool;
+  private s3Client: S3Client;
+  private bucketName: string;
 
   constructor(pool: Pool) {
     this.pool = pool;
+    this.bucketName = process.env.S3_BUCKET_NAME || "default";
+
+    this.s3Client = new S3Client({
+      region: process.env.S3_REGION || "us-east-1",
+      endpoint: process.env.S3_ENDPOINT,
+      forcePathStyle: true,
+      credentials: process.env.S3_ACCESS_KEY_ID
+        ? {
+            accessKeyId: process.env.S3_ACCESS_KEY_ID,
+            secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "",
+          }
+        : undefined,
+    });
   }
 
   async saveDrawing(senderId: string, drawingData: Buffer): Promise<void> {
+    const pairResult = await this.pool.query(
+      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
+      [senderId],
+    );
+
+    if (pairResult.rows.length === 0) {
+      throw new Error("Sender is not in an active pair");
+    }
+
+    const pairId = pairResult.rows[0].id;
+    const s3Key = `drawings/${pairId}/${Date.now()}.png`;
+
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: s3Key,
+        Body: drawingData,
+        ContentType: "image/png",
+      }),
+    );
+
+    const presignedUrl = await getSignedUrl(
+      this.s3Client,
+      new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: s3Key,
+      }),
+      { expiresIn: 259200 },
+    );
+
     await this.pool.query(
       `WITH cleanup AS (
          DELETE FROM drawings WHERE expires_at <= NOW()
        )
-       INSERT INTO drawings(sender_id, image_data, expires_at) 
-       VALUES($1, $2, NOW() + INTERVAL '3 days')`,
-      [senderId, drawingData],
+       INSERT INTO drawings(pair_id, sender_id, image_url, expires_at) 
+       VALUES($1, $2, $3, NOW() + INTERVAL '3 days')`,
+      [pairId, senderId, presignedUrl],
     );
   }
 
-  async getLatestDrawing(myUserId: string): Promise<Buffer | null> {
-    const result = await this.pool.query(
-      `SELECT image_data FROM drawings 
-       WHERE sender_id != $1 AND expires_at > NOW() 
-       ORDER BY id DESC LIMIT 1`,
+  async getLatestDrawing(myUserId: string): Promise<string | null> {
+    const pairResult = await this.pool.query(
+      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
       [myUserId],
     );
 
+    if (pairResult.rows.length === 0) {
+      return null;
+    }
+
+    const pairId = pairResult.rows[0].id;
+
+    const result = await this.pool.query(
+      `SELECT image_url FROM drawings 
+       WHERE pair_id = $1 AND sender_id != $2 AND expires_at > NOW() 
+       ORDER BY id DESC LIMIT 1`,
+      [pairId, myUserId],
+    );
+
     if (result.rows.length > 0) {
-      return result.rows[0].image_data;
+      return result.rows[0].image_url;
     }
     return null;
   }
 
-  async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO fcm_tokens(user_id, fcm_token, updated_at) 
-       VALUES($1, $2, NOW())
-       ON CONFLICT(user_id) DO UPDATE SET fcm_token = $2, updated_at = NOW()`,
-      [userId, fcmToken],
+  async getPartnerId(userId: string): Promise<string | null> {
+    const result = await this.pool.query(
+      `SELECT user1_id, user2_id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
+      [userId],
     );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const pair = result.rows[0];
+    return pair.user1_id === userId ? pair.user2_id : pair.user1_id;
+  }
+
+  async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
+    await this.pool.query(`UPDATE users SET fcm_token = $2 WHERE id = $1`, [
+      userId,
+      fcmToken,
+    ]);
   }
 
   async getFCMToken(userId: string): Promise<string | null> {
     const result = await this.pool.query(
-      `SELECT fcm_token FROM fcm_tokens WHERE user_id = $1`,
+      `SELECT fcm_token FROM users WHERE id = $1`,
       [userId],
     );
     return result.rows.length > 0 ? result.rows[0].fcm_token : null;
