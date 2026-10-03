@@ -5,15 +5,14 @@ import {
   GetObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { SignedUrl } from "./types/SignedUrl";
 
 export class DrawingRepository {
   private pool: Pool;
   private s3Client: S3Client;
-  private bucketName: string;
 
   constructor(pool: Pool) {
     this.pool = pool;
-    this.bucketName = process.env.S3_BUCKET_NAME || "default";
 
     this.s3Client = new S3Client({
       region: process.env.S3_REGION || "us-east-1",
@@ -28,7 +27,7 @@ export class DrawingRepository {
     });
   }
 
-  async saveDrawing(senderId: string, drawingData: Buffer): Promise<void> {
+  async sendSignedUrl(senderId: string): Promise<SignedUrl> {
     const pairResult = await this.pool.query(
       `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
       [senderId],
@@ -41,31 +40,36 @@ export class DrawingRepository {
     const pairId = pairResult.rows[0].id;
     const s3Key = `drawings/${pairId}/${Date.now()}.png`;
 
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: s3Key,
-        Body: drawingData,
-        ContentType: "image/png",
-      }),
-    );
-
     const presignedUrl = await getSignedUrl(
       this.s3Client,
-      new GetObjectCommand({
-        Bucket: this.bucketName,
+      new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
         Key: s3Key,
+        ContentType: "image/png",
       }),
-      { expiresIn: 259200 },
+      { expiresIn: 60 },
     );
 
+    return { S3URL: presignedUrl, filekey: s3Key };
+  }
+
+  async confirmDrawing(senderId: string, fileKey: string): Promise<void> {
+    const pairResult = await this.pool.query(
+      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
+      [senderId],
+    );
+    if (pairResult.rows.length === 0) return;
+
+    const pairId = pairResult.rows[0].id;
+    const permanentImageUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`;
+
     await this.pool.query(
-      `WITH cleanup AS (
-         DELETE FROM drawings WHERE expires_at <= NOW()
-       )
-       INSERT INTO drawings(pair_id, sender_id, image_url, expires_at) 
-       VALUES($1, $2, $3, NOW() + INTERVAL '3 days')`,
-      [pairId, senderId, presignedUrl],
+      `WITH cleanup AS (                                                                                  
+             DELETE FROM drawings WHERE expires_at <= NOW()                                                   
+           )                                                                                                  
+           INSERT INTO drawings(pair_id, sender_id, image_url, expires_at)                                    
+           VALUES($1, $2, $3, NOW() + INTERVAL '3 days')`,
+      [pairId, senderId, permanentImageUrl],
     );
   }
 

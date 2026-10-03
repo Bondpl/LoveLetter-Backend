@@ -12,7 +12,7 @@ export class AuthService {
 
   private generateJwtToken(userId: string): string {
     const secret = process.env.JWT_SECRET || "local_jwt_secret_key";
-    return jwt.sign({ userId }, secret, { expiresIn: "5d" });
+    return jwt.sign({ userId }, secret, { expiresIn: "10y" });
   }
 
   async createAnonymousUser(): Promise<AnonymousAuthResponse> {
@@ -42,8 +42,13 @@ export class AuthService {
     }
 
     const userId = await this.authRepository.createUser();
-    await this.authRepository.joinPair(pair.id, userId);
-
+    const joinedSuccessfully = await this.authRepository.joinPair(
+      pair.id,
+      userId,
+    );
+    if (!joinedSuccessfully) {
+      throw new Error("The pair was filled a millisecond ago by someone else!");
+    }
     const token = this.generateJwtToken(userId);
 
     return {
@@ -51,5 +56,14 @@ export class AuthService {
       pairId: pair.id,
       userId,
     };
+  }
+  async leaveAndCreateNewPair(userId: string): Promise<{ pairCode: string }> {
+    await this.authRepository.leavePair(userId);
+
+    const newPairCode = this.generatePairCode();
+
+    await this.authRepository.createPair(userId, newPairCode);
+
+    return { pairCode: newPairCode };
   }
 }

@@ -17,7 +17,7 @@ if (process.env.FIREBASE_CREDENTIALS) {
     initializeApp({
       credential: cert(serviceAccount),
     });
-    console.log("✅ Firebase initialized successfully.");
+    console.log("Firebase initialized successfully.");
   } catch (error) {
     console.error("Failed to parse or initialize FIREBASE_CREDENTIALS:", error);
   }
@@ -69,19 +69,59 @@ app.post("/api/pairs/join", async (req, res) => {
   }
 });
 
+app.post("/api/pairs/leave", requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId!;
+
+    const result = await authService.leaveAndCreateNewPair(userId);
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error leaving pair:", error);
+    res.status(500).send(error.message || "Internal Server Error");
+  }
+});
+
 app.post("/api/drawings", requireAuth, async (req, res) => {
   try {
     const senderId = req.userId!;
-    const drawingBuffer = req.body;
 
-    if (!drawingBuffer || drawingBuffer.length === 0) {
-      return res.status(400).send("Drawing image buffer is required");
+    const urlData = await drawingService.addNewDrawing(senderId);
+
+    res.status(200).send(urlData);
+  } catch (error: any) {
+    console.error("Error generating upload URL:", error);
+    res.status(500).send(error.message || "Internal Server Error");
+  }
+});
+
+app.post("/api/drawings/confirm", requireAuth, async (req, res) => {
+  try {
+    const senderId = req.userId!;
+
+    const { filekey } = req.body ?? {};
+
+    if (!filekey) {
+      return res.status(400).send("filekey is required");
     }
 
-    await drawingService.addNewDrawing(senderId, drawingBuffer);
-    res.status(200).send("Drawing saved successfully to S3 and database");
+    await drawingService.confirmUploadDrawingAndNotify(senderId, filekey);
+
+    res
+      .status(200)
+      .send("Upload confirmed, saved to database and partner notified!");
   } catch (error: any) {
-    console.error("Error saving drawing:", error);
+    console.error("Error confirming upload:", error);
+
+    if (error.message === "S3_FILE_NOT_FOUND") {
+      return res
+        .status(400)
+        .send("File not found on AWS. Upload failed or key is invalid.");
+    }
+    if (error.message === "NO_ACTIVE_PAIR") {
+      return res.status(403).send("User is not in an active pair.");
+    }
+
     res.status(500).send(error.message || "Internal Server Error");
   }
 });

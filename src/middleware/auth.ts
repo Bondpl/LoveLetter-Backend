@@ -14,7 +14,7 @@ export const requireAuth = (
 
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
-    const secret = process.env.JWT_SECRET || "default_local_jwt_secret_key";
+    const secret = process.env.JWT_SECRET || "local_jwt_secret_key";
 
     try {
       const decoded = jwt.verify(token, secret) as JwtPayload;
@@ -27,7 +27,10 @@ export const requireAuth = (
 
   // Fallback for legacy API keys during development
   const apiKey = req.headers["api_key"] as string | undefined;
-  if (apiKey && (apiKey === process.env.API_KEY1 || apiKey === process.env.API_KEY2)) {
+  if (
+    apiKey &&
+    (apiKey === process.env.API_KEY1 || apiKey === process.env.API_KEY2)
+  ) {
     req.userId = apiKey;
     return next();
   }
