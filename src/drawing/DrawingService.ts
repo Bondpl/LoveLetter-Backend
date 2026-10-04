@@ -2,7 +2,7 @@ import { DrawingRepository } from "../drawing/DrawingRepository";
 import { NotificationService } from "../NotificationService";
 import { SaveFcmTokenInput } from "../types/requests";
 import { SignedUrl } from "../types/SignedUrl";
-
+import { AppError } from "../util/appError";
 export class DrawingService {
   constructor(
     private drawingRepository: DrawingRepository,
@@ -40,7 +40,7 @@ export class DrawingService {
 
   async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {
     if (!FcmTokenRequest.token) {
-      throw new Error("FCM token is required");
+      throw new AppError("FCM token is required", 400);
     }
 
     await this.notificationService.saveFCMToken(

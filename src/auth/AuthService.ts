@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
+import { AppError } from "../util/appError";
 
 export class AuthService {
   constructor(private authRepository: AuthRepository) {}
@@ -34,11 +35,11 @@ export class AuthService {
     const pair = await this.authRepository.findPairByCode(pairCodeStr);
 
     if (!pair) {
-      throw new Error("Invalid or inactive pair code");
+      throw new AppError("Invalid or inactive pair code", 400);
     }
 
     if (pair.user2_id) {
-      throw new Error("This pair is already full!");
+      throw new AppError("This pair is already full!", 403);
     }
 
     const userId = await this.authRepository.createUser();
@@ -47,7 +48,7 @@ export class AuthService {
       userId,
     );
     if (!joinedSuccessfully) {
-      throw new Error("The pair was filled a millisecond ago by someone else!");
+      throw new AppError("The pair was filled a millisecond ago by someone else!", 409);
     }
     const token = this.generateJwtToken(userId);
 
