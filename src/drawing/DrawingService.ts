@@ -1,7 +1,7 @@
-import { DrawingRepository } from "./DrawingRepository";
-import { NotificationService } from "./NotificationService";
-import { SaveFcmTokenInput } from "./types/requests";
-import { SignedUrl } from "./types/SignedUrl";
+import { DrawingRepository } from "../drawing/DrawingRepository";
+import { NotificationService } from "../NotificationService";
+import { SaveFcmTokenInput } from "../types/requests";
+import { SignedUrl } from "../types/SignedUrl";
 
 export class DrawingService {
   constructor(

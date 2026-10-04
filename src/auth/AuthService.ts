@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { AuthRepository } from "./AuthRepository";
-import { AnonymousAuthResponse, JoinPairResponse } from "./types/requests";
+import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
 
 export class AuthService {
   constructor(private authRepository: AuthRepository) {}

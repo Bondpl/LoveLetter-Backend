@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { PairRow } from "./types/requests";
+import { PairRow } from "../types/requests";
 
 export class AuthRepository {
   private pool: Pool;

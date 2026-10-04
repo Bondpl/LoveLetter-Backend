@@ -5,7 +5,7 @@ import {
   GetObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { SignedUrl } from "./types/SignedUrl";
+import { SignedUrl } from "../types/SignedUrl";
 
 export class DrawingRepository {
   private pool: Pool;

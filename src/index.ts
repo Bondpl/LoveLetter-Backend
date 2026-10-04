@@ -1,15 +1,15 @@
 import "dotenv/config";
 import express from "express";
 import { initializeApp, cert } from "firebase-admin/app";
-import { DrawingRepository } from "./DrawingRepository";
+import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./dataBaseConnector";
 import { requireAuth } from "./middleware/auth";
 import type { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
 import { NotificationService } from "./NotificationService";
-import { DrawingService } from "./DrawingService";
-import { AuthRepository } from "./AuthRepository";
-import { AuthService } from "./AuthService";
+import { DrawingService } from "./drawing/DrawingService";
+import { AuthRepository } from "./auth/AuthRepository";
+import { AuthService } from "./auth/AuthService";
 
 if (process.env.FIREBASE_CREDENTIALS) {
   try {
