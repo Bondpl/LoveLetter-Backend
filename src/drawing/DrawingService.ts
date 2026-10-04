@@ -22,7 +22,8 @@ export class DrawingService {
     const partnerId = await this.drawingRepository.getPartnerId(senderId);
 
     if (partnerId) {
-      const partnerToken = await this.drawingRepository.getFCMToken(partnerId);
+      const partnerToken =
+        await this.notificationService.getFCMToken(partnerId);
       if (partnerToken) {
         try {
           await this.notificationService.notifyPartner(partnerToken);
@@ -42,7 +43,7 @@ export class DrawingService {
       throw new Error("FCM token is required");
     }
 
-    await this.drawingRepository.saveFCMToken(
+    await this.notificationService.saveFCMToken(
       FcmTokenRequest.userId,
       FcmTokenRequest.token,
     );
