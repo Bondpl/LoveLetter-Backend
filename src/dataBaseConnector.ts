@@ -18,7 +18,6 @@ export const pool = new Pool({
 
 pool.on("error", (err) => {
   console.error("Database pool error:", err);
-  process.exit(1);
 });
 
 pool.on("connect", () => {
