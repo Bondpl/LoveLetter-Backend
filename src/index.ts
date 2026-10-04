@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
-import { pool } from "./dataBaseConnector";
+import { pool, drawingLimiter } from "./dataBaseConnector";
 import { requireAuth } from "./middleware/auth";
 import type { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
@@ -82,7 +82,7 @@ app.post("/api/pairs/leave", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/drawings", requireAuth, async (req, res) => {
+app.post("/api/drawings", requireAuth, drawingLimiter, async (req, res) => {
   try {
     const senderId = req.userId!;
 
