@@ -3,7 +3,7 @@ import express from "express";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool, drawingLimiter } from "./dataBaseConnector";
-import { requireAuth } from "./middleware/auth";
+import { readyMiddleware } from "./middleware/auth";
 import type { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
 import { NotificationService } from "./NotificationService";
@@ -44,12 +44,12 @@ const drawingService = new DrawingService(
 
 const authRepository = new AuthRepository(pool);
 const authService = new AuthService(authRepository);
+const requireAuth = readyMiddleware(authService);
 
 app.post("/api/auth/anonymous", async (req, res) => {
   const result = await authService.createAnonymousUser();
   res.status(200).json(result);
 });
-
 app.post("/api/pairs/join", async (req, res) => {
   const { pairCode } = req.body ?? {};
   if (!pairCode) {
@@ -108,7 +108,9 @@ app.use((err: any, req: any, res: any, next: any) => {
   console.error("Global Error:", err.message);
 
   const status = err.status || 500;
-  res.status(status).send(err.message || "Internal Server Error");
+  res.status(status).json({
+    err,
+  });
 });
 
 app.listen(port, "0.0.0.0", () => {

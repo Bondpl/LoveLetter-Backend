@@ -11,9 +11,10 @@ export class AuthService {
     return `${randomDigits}`;
   }
 
-  private generateJwtToken(userId: string): string {
+  private async generateJwtToken(userId: string): Promise<string> {
     const secret = process.env.JWT_SECRET || "local_jwt_secret_key";
-    return jwt.sign({ userId }, secret, { expiresIn: "10y" });
+    const tokenVersion = await this.getTokenVersion(userId);
+    return jwt.sign({ userId, tokenVersion }, secret, { expiresIn: "10y" });
   }
 
   async createAnonymousUser(): Promise<AnonymousAuthResponse> {
@@ -21,7 +22,7 @@ export class AuthService {
     const pairCode = this.generatePairCode();
 
     await this.authRepository.createPair(userId, pairCode);
-    const token = this.generateJwtToken(userId);
+    const token = await this.generateJwtToken(userId);
 
     return {
       token,
@@ -48,9 +49,12 @@ export class AuthService {
       userId,
     );
     if (!joinedSuccessfully) {
-      throw new AppError("The pair was filled a millisecond ago by someone else!", 409);
+      throw new AppError(
+        "The pair was filled a millisecond ago by someone else!",
+        409,
+      );
     }
-    const token = this.generateJwtToken(userId);
+    const token = await this.generateJwtToken(userId);
 
     return {
       token,
@@ -66,5 +70,9 @@ export class AuthService {
     await this.authRepository.createPair(userId, newPairCode);
 
     return { pairCode: newPairCode };
+  }
+
+  async getTokenVersion(userId: string): Promise<number> {
+    return await this.authRepository.getTokenVersion(userId);
   }
 }

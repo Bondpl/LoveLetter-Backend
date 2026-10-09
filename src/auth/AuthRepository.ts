@@ -53,4 +53,13 @@ export class AuthRepository {
       [userId],
     );
   }
+
+  async getTokenVersion(userId: string): Promise<number> {
+    const result = await this.pool.query(
+      "SELECT token_version FROM users WHERE id = $1",
+      [userId],
+    );
+
+    return result.rows[0].token_version;
+  }
 }

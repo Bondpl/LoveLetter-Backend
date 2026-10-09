@@ -2,6 +2,7 @@ import "express";
 
 export interface JwtPayload {
   userId: string;
+  tokenVersion: string;
 }
 
 declare global {
