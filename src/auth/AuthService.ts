@@ -63,14 +63,8 @@ export class AuthService {
     };
   }
 
-  async leaveAndCreateNewPair(userId: string): Promise<{ pairCode: string }> {
+  async leavePair(userId: string) {
     await this.authRepository.leavePair(userId);
-
-    const newPairCode = this.generatePairCode();
-
-    await this.authRepository.createPair(userId, newPairCode);
-
-    return { pairCode: newPairCode };
   }
 
   async getTokenVersion(userId: string): Promise<number> {

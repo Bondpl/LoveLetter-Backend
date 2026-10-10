@@ -66,7 +66,7 @@ app.post("/api/pairs/join", async (req, res) => {
 
 app.post("/api/pairs/leave", requireAuth, async (req, res) => {
   const userId = req.userId!;
-  const result = await authService.leaveAndCreateNewPair(userId);
+  const result = await authService.leavePair(userId);
   res.status(200).json(result);
 });
 
