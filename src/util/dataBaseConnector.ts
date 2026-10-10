@@ -1,8 +1,5 @@
 import { Pool } from "pg";
 import process from "process";
-import rateLimit from "express-rate-limit";
-import RedisStore from "rate-limit-redis";
-import Redis from "ioredis";
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL environment variable is not set");
@@ -17,25 +14,6 @@ export const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-});
-
-const redisClient = new Redis(
-  process.env.REDIS_URL || "redis://localhost:6379",
-);
-redisClient.on("error", (err) => console.log("Redis Client Error", err));
-
-export const drawingLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-
-  max: 6,
-  message: "Limit rate exceeded.",
-  keyGenerator: (req: any) => {
-    return req.userId;
-  },
-  store: new RedisStore({
-    sendCommand: (...args: string[]) =>
-      redisClient.call(args[0]!, ...args.slice(1)) as any,
-  }),
 });
 
 pool.on("error", (err) => {

@@ -3,10 +3,12 @@ import { NotificationService } from "../NotificationService";
 import { SaveFcmTokenInput } from "../types/requests";
 import { SignedUrl } from "../types/SignedUrl";
 import { AppError } from "../util/appError";
+import { DrawingCache } from "../util/redisClient";
 export class DrawingService {
   constructor(
     private drawingRepository: DrawingRepository,
     private notificationService: NotificationService,
+    private drawingCache: DrawingCache,
   ) {}
 
   async addNewDrawing(senderId: string): Promise<SignedUrl> {
@@ -34,8 +36,18 @@ export class DrawingService {
     }
   }
 
-  async getNewDrawing(myUserId: string): Promise<string | null> {
-    return await this.drawingRepository.getLatestDrawing(myUserId);
+  async getNewDrawing(userId: string): Promise<string | null> {
+    const cachedUrl = await this.drawingCache.getLatestDrawing(userId);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    const dbUrl = await this.drawingRepository.getLatestDrawing(userId);
+
+    if (dbUrl) {
+      await this.drawingCache.saveLatestDrawing(userId, dbUrl);
+    }
+    return dbUrl;
   }
 
   async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {

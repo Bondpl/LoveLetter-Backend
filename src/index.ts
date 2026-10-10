@@ -2,7 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
-import { pool, drawingLimiter } from "./dataBaseConnector";
+import { pool } from "./util/dataBaseConnector";
+import { drawingLimiter, DrawingCache, redisClient } from "./util/redisClient";
 import { readyMiddleware } from "./middleware/auth";
 import type { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
@@ -32,6 +33,7 @@ const app = express();
 app.use(express.json());
 app.use(express.raw({ type: "image/png", limit: "5mb" }));
 
+const drawingCache = new DrawingCache(redisClient);
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 const drawingRepository = new DrawingRepository(pool);
@@ -40,6 +42,7 @@ const notificationService = new NotificationService(pool);
 const drawingService = new DrawingService(
   drawingRepository,
   notificationService,
+  drawingCache,
 );
 
 const authRepository = new AuthRepository(pool);
