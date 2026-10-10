@@ -11,6 +11,7 @@ import { NotificationService } from "./NotificationService";
 import { DrawingService } from "./drawing/DrawingService";
 import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
+import { stat } from "fs";
 
 if (process.env.FIREBASE_CREDENTIALS) {
   try {
@@ -31,7 +32,6 @@ if (process.env.FIREBASE_CREDENTIALS) {
 const app = express();
 
 app.use(express.json());
-app.use(express.raw({ type: "image/png", limit: "5mb" }));
 
 const drawingCache = new DrawingCache(redisClient);
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
@@ -113,7 +113,8 @@ app.use((err: any, req: any, res: any, next: any) => {
 
   const status = err.status || 500;
   res.status(status).json({
-    err,
+    error: err.message,
+    status: status,
   });
 });
 

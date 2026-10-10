@@ -4,6 +4,7 @@ import { SaveFcmTokenInput } from "../types/requests";
 import { SignedUrl } from "../types/SignedUrl";
 import { AppError } from "../util/appError";
 import { DrawingCache } from "../util/redisClient";
+
 export class DrawingService {
   constructor(
     private drawingRepository: DrawingRepository,
@@ -24,6 +25,7 @@ export class DrawingService {
     const partnerId = await this.drawingRepository.getPartnerId(senderId);
 
     if (partnerId) {
+      await this.drawingCache.clearDrawing(partnerId);
       const partnerToken =
         await this.notificationService.getFCMToken(partnerId);
       if (partnerToken) {

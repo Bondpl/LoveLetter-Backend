@@ -62,6 +62,7 @@ export class AuthService {
       userId,
     };
   }
+
   async leaveAndCreateNewPair(userId: string): Promise<{ pairCode: string }> {
     await this.authRepository.leavePair(userId);
 

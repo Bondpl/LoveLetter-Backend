@@ -38,4 +38,8 @@ export class DrawingCache {
     const key = this.getPartnerDrawingKey(userId);
     await this.redis.set(key, drawingUrl, "EX", 259200);
   }
+  async clearDrawing(userId: string) {
+    const key = this.getPartnerDrawingKey(userId);
+    await this.redis.del(key);
+  }
 }
