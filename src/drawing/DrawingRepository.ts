@@ -1,11 +1,8 @@
 import { Pool } from "pg";
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { SignedUrl } from "./types/SignedUrl";
+import { SignedUrl } from "../types/SignedUrl";
+import { AppError } from "../util/appError";
 
 export class DrawingRepository {
   private pool: Pool;
@@ -34,7 +31,7 @@ export class DrawingRepository {
     );
 
     if (pairResult.rows.length === 0) {
-      throw new Error("Sender is not in an active pair");
+      throw new AppError("Sender is not in an active pair", 403);
     }
 
     const pairId = pairResult.rows[0].id;
@@ -110,20 +107,5 @@ export class DrawingRepository {
 
     const pair = result.rows[0];
     return pair.user1_id === userId ? pair.user2_id : pair.user1_id;
-  }
-
-  async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
-    await this.pool.query(`UPDATE users SET fcm_token = $2 WHERE id = $1`, [
-      userId,
-      fcmToken,
-    ]);
-  }
-
-  async getFCMToken(userId: string): Promise<string | null> {
-    const result = await this.pool.query(
-      `SELECT fcm_token FROM users WHERE id = $1`,
-      [userId],
-    );
-    return result.rows.length > 0 ? result.rows[0].fcm_token : null;
   }
 }

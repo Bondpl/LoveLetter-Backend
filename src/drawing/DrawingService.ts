@@ -1,12 +1,15 @@
-import { DrawingRepository } from "./DrawingRepository";
-import { NotificationService } from "./NotificationService";
-import { SaveFcmTokenInput } from "./types/requests";
-import { SignedUrl } from "./types/SignedUrl";
+import { DrawingRepository } from "../drawing/DrawingRepository";
+import { NotificationService } from "../NotificationService";
+import { SaveFcmTokenInput } from "../types/requests";
+import { SignedUrl } from "../types/SignedUrl";
+import { AppError } from "../util/appError";
+import { DrawingCache } from "../util/redisClient";
 
 export class DrawingService {
   constructor(
     private drawingRepository: DrawingRepository,
     private notificationService: NotificationService,
+    private drawingCache: DrawingCache,
   ) {}
 
   async addNewDrawing(senderId: string): Promise<SignedUrl> {
@@ -22,7 +25,9 @@ export class DrawingService {
     const partnerId = await this.drawingRepository.getPartnerId(senderId);
 
     if (partnerId) {
-      const partnerToken = await this.drawingRepository.getFCMToken(partnerId);
+      await this.drawingCache.clearDrawing(partnerId);
+      const partnerToken =
+        await this.notificationService.getFCMToken(partnerId);
       if (partnerToken) {
         try {
           await this.notificationService.notifyPartner(partnerToken);
@@ -33,16 +38,26 @@ export class DrawingService {
     }
   }
 
-  async getNewDrawing(myUserId: string): Promise<string | null> {
-    return await this.drawingRepository.getLatestDrawing(myUserId);
+  async getNewDrawing(userId: string): Promise<string | null> {
+    const cachedUrl = await this.drawingCache.getLatestDrawing(userId);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    const dbUrl = await this.drawingRepository.getLatestDrawing(userId);
+
+    if (dbUrl) {
+      await this.drawingCache.saveLatestDrawing(userId, dbUrl);
+    }
+    return dbUrl;
   }
 
   async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {
     if (!FcmTokenRequest.token) {
-      throw new Error("FCM token is required");
+      throw new AppError("FCM token is required", 400);
     }
 
-    await this.drawingRepository.saveFCMToken(
+    await this.notificationService.saveFCMToken(
       FcmTokenRequest.userId,
       FcmTokenRequest.token,
     );

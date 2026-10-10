@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { PairRow } from "./types/requests";
+import { PairRow } from "../types/requests";
 
 export class AuthRepository {
   private pool: Pool;
@@ -52,5 +52,14 @@ export class AuthRepository {
       `UPDATE pairs SET is_active = FALSE WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE`,
       [userId],
     );
+  }
+
+  async getTokenVersion(userId: string): Promise<number> {
+    const result = await this.pool.query(
+      "SELECT token_version FROM users WHERE id = $1",
+      [userId],
+    );
+
+    return result.rows[0].token_version;
   }
 }
