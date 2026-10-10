@@ -50,6 +50,7 @@ app.post("/api/auth/anonymous", async (req, res) => {
   const result = await authService.createAnonymousUser();
   res.status(200).json(result);
 });
+
 app.post("/api/pairs/join", async (req, res) => {
   const { pairCode } = req.body ?? {};
   if (!pairCode) {

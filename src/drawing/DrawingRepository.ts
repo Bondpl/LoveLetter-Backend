@@ -1,9 +1,5 @@
 import { Pool } from "pg";
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
 import { AppError } from "../util/appError";

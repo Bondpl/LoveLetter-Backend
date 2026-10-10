@@ -26,8 +26,12 @@ redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
 export const drawingLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
+
   max: 6,
   message: "Limit rate exceeded.",
+  keyGenerator: (req: any) => {
+    return req.userId;
+  },
   store: new RedisStore({
     sendCommand: (...args: string[]) =>
       redisClient.call(args[0]!, ...args.slice(1)) as any,
