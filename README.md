@@ -24,16 +24,16 @@ A lightweight, robust backend service designed to support the **LoveLetter Kotli
 
 ## Technology Stack
 
-| Technology             | Description                                |
-| :--------------------- | :----------------------------------------- |
-| **Runtime**            | Node.js (v20+)                             |
-| **Language**           | TypeScript (v5.7)                          |
-| **Framework**          | Express.js (v5.2)                          |
-| **Database**           | PostgreSQL (`pg` driver)                   |
-| **Storage**            | AWS SDK v3 (S3 Client)                     |
-| **Push Notifications** | Firebase Admin SDK (FCM)                   |
-| **Authentication**     | JSON Web Tokens (`jsonwebtoken`)           |
-| **Rate Limiting**      | Express Rate Limit & Redis (`ioredis`)     |
+| Technology             | Description                            |
+| :--------------------- | :------------------------------------- |
+| **Runtime**            | Node.js (v20+)                         |
+| **Language**           | TypeScript (v5.7)                      |
+| **Framework**          | Express.js (v5.2)                      |
+| **Database**           | PostgreSQL (`pg` driver)               |
+| **Storage**            | AWS SDK v3 (S3 Client)                 |
+| **Push Notifications** | Firebase Admin SDK (FCM)               |
+| **Authentication**     | JSON Web Tokens (`jsonwebtoken`)       |
+| **Rate Limiting**      | Express Rate Limit & Redis (`ioredis`) |
 
 ---
 
@@ -71,6 +71,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
 ### Authentication & Pairing
 
 #### 1. Create Anonymous Account
+
 - **Endpoint:** `POST /api/auth/anonymous`
 - **Response:** `200 OK`
   ```json
@@ -78,6 +79,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
   ```
 
 #### 2. Join a Pair
+
 - **Endpoint:** `POST /api/pairs/join`
 - **Body:** `{ "pairCode": "123456" }`
 - **Response:** `200 OK`
@@ -86,6 +88,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
   ```
 
 #### 3. Leave Pair (Requires Auth)
+
 - **Endpoint:** `POST /api/pairs/leave`
 - **Response:** `200 OK`
   ```json
@@ -95,6 +98,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
 ### Drawings & Notifications
 
 #### 1. Request S3 Upload URL
+
 - **Endpoint:** `POST /api/drawings`
 - **Response:** `200 OK`
   ```json
@@ -102,11 +106,13 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
   ```
 
 #### 2. Confirm Upload & Notify Partner
+
 - **Endpoint:** `POST /api/drawings/confirm`
 - **Body:** `{ "filekey": "drawings/..." }`
 - **Response:** `200 OK` ("Upload confirmed, saved to database and partner notified!")
 
 #### 3. Fetch Latest Drawing
+
 - **Endpoint:** `GET /api/drawings`
 - **Response:** `200 OK`
   ```json
@@ -114,6 +120,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
   ```
 
 #### 4. Register FCM Token
+
 - **Endpoint:** `POST /api/fcm-token`
 - **Body:** `{ "token": "your_firebase_fcm_device_token" }`
 - **Response:** `200 OK` ("FCM token saved successfully")
@@ -133,11 +140,13 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
 ### Local Setup
 
 1. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 2. **Start in development mode:**
+
    ```bash
    npm run dev
    ```
@@ -154,6 +163,7 @@ All protected endpoints require the `Authorization` header set to `Bearer <YOUR_
 To build and run the application container locally or in cloud providers:
 
 1. **Start with Docker Compose (Recommended):**
+
    ```bash
    docker-compose up --build
    ```

@@ -32,4 +32,5 @@ export interface JoinPairResponse {
   token: string;
   pairId: string;
   userId: string;
+  partnerPublicKey: string;
 }

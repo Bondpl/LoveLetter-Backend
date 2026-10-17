@@ -8,9 +8,10 @@ export class AuthRepository {
     this.pool = pool;
   }
 
-  async createUser(): Promise<string> {
+  async createUser(publicKey: string): Promise<string> {
     const result = await this.pool.query(
-      `INSERT INTO users DEFAULT VALUES RETURNING id`,
+      `INSERT INTO users (public_key) VALUES ($1) RETURNING id`,
+      [publicKey],
     );
     return result.rows[0].id;
   }
@@ -61,5 +62,13 @@ export class AuthRepository {
     );
 
     return result.rows[0].token_version;
+  }
+
+  async getUserPublicKey(userId: string): Promise<string> {
+    const result = await this.pool.query(
+      `SELECT public_key FROM users WHERE id = $1`,
+      [userId],
+    );
+    return result.rows[0].public_key;
   }
 }

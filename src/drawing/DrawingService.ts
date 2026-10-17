@@ -2,6 +2,7 @@ import { DrawingRepository } from "../drawing/DrawingRepository";
 import { NotificationService } from "../NotificationService";
 import { SaveFcmTokenInput } from "../types/requests";
 import { SignedUrl } from "../types/SignedUrl";
+import { Drawing } from "../types/Drawing";
 import { AppError } from "../util/appError";
 import { DrawingCache } from "../util/redisClient";
 
@@ -20,36 +21,26 @@ export class DrawingService {
   async confirmUploadDrawingAndNotify(
     senderId: string,
     fileKey: string,
+    iv: string,
   ): Promise<void> {
-    await this.drawingRepository.confirmDrawing(senderId, fileKey);
-    const partnerId = await this.drawingRepository.getPartnerId(senderId);
+    await this.drawingRepository.confirmDrawing(senderId, fileKey, iv);
 
-    if (partnerId) {
-      await this.drawingCache.clearDrawing(partnerId);
-      const partnerToken =
-        await this.notificationService.getFCMToken(partnerId);
-      if (partnerToken) {
-        try {
-          await this.notificationService.notifyPartner(partnerToken);
-        } catch (err) {
-          console.warn("Could not send FCM notification to partner:", err);
-        }
-      }
-    }
+    const partnerId = await this.drawingRepository.getPartnerId(senderId);
+    if (!partnerId) return;
+
+    await this.drawingCache.clearDrawing(partnerId);
+    await this.notificationService.notifyPartnerIfTokenExists(partnerId);
   }
 
-  async getNewDrawing(userId: string): Promise<string | null> {
-    const cachedUrl = await this.drawingCache.getLatestDrawing(userId);
-    if (cachedUrl) {
-      return cachedUrl;
-    }
+  async getNewDrawing(userId: string): Promise<Drawing | null> {
+    const cached = await this.drawingCache.getLatestDrawing(userId);
+    if (cached) return cached;
 
-    const dbUrl = await this.drawingRepository.getLatestDrawing(userId);
-
-    if (dbUrl) {
-      await this.drawingCache.saveLatestDrawing(userId, dbUrl);
+    const drawing = await this.drawingRepository.getLatestDrawing(userId);
+    if (drawing) {
+      await this.drawingCache.saveLatestDrawing(userId, drawing);
     }
-    return dbUrl;
+    return drawing;
   }
 
   async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {

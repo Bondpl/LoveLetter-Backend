@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
+import { Drawing } from "../types/Drawing";
 import { AppError } from "../util/appError";
 
 export class DrawingRepository {
@@ -50,7 +51,11 @@ export class DrawingRepository {
     return { S3URL: presignedUrl, filekey: s3Key };
   }
 
-  async confirmDrawing(senderId: string, fileKey: string): Promise<void> {
+  async confirmDrawing(
+    senderId: string,
+    fileKey: string,
+    iv: string,
+  ): Promise<void> {
     const pairResult = await this.pool.query(
       `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
       [senderId],
@@ -64,13 +69,13 @@ export class DrawingRepository {
       `WITH cleanup AS (                                                                                  
              DELETE FROM drawings WHERE expires_at <= NOW()                                                   
            )                                                                                                  
-           INSERT INTO drawings(pair_id, sender_id, image_url, expires_at)                                    
-           VALUES($1, $2, $3, NOW() + INTERVAL '3 days')`,
-      [pairId, senderId, permanentImageUrl],
+           INSERT INTO drawings(pair_id, sender_id, image_url, expires_at, iv)                                    
+           VALUES($1, $2, $3, NOW() + INTERVAL '3 days', $4)`,
+      [pairId, senderId, permanentImageUrl, iv],
     );
   }
 
-  async getLatestDrawing(myUserId: string): Promise<string | null> {
+  async getLatestDrawing(myUserId: string): Promise<Drawing | null> {
     const pairResult = await this.pool.query(
       `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
       [myUserId],
@@ -83,14 +88,15 @@ export class DrawingRepository {
     const pairId = pairResult.rows[0].id;
 
     const result = await this.pool.query(
-      `SELECT image_url FROM drawings 
+      `SELECT image_url, iv FROM drawings 
        WHERE pair_id = $1 AND sender_id != $2 AND expires_at > NOW() 
        ORDER BY id DESC LIMIT 1`,
       [pairId, myUserId],
     );
 
     if (result.rows.length > 0) {
-      return result.rows[0].image_url;
+      const { image_url: imageUrl, iv } = result.rows[0];
+      return { imageUrl, iv };
     }
     return null;
   }

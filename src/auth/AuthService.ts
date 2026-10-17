@@ -17,8 +17,8 @@ export class AuthService {
     return jwt.sign({ userId, tokenVersion }, secret, { expiresIn: "10y" });
   }
 
-  async createAnonymousUser(): Promise<AnonymousAuthResponse> {
-    const userId = await this.authRepository.createUser();
+  async createAnonymousUser(publicKey: string): Promise<AnonymousAuthResponse> {
+    const userId = await this.authRepository.createUser(publicKey);
     const pairCode = this.generatePairCode();
 
     await this.authRepository.createPair(userId, pairCode);
@@ -31,7 +31,10 @@ export class AuthService {
     };
   }
 
-  async joinPairWithCode(pairCode: string): Promise<JoinPairResponse> {
+  async joinPairWithCode(
+    pairCode: string,
+    publicKey: string,
+  ): Promise<JoinPairResponse> {
     const pairCodeStr = String(pairCode).trim();
     const pair = await this.authRepository.findPairByCode(pairCodeStr);
 
@@ -43,7 +46,7 @@ export class AuthService {
       throw new AppError("This pair is already full!", 403);
     }
 
-    const userId = await this.authRepository.createUser();
+    const userId = await this.authRepository.createUser(publicKey);
     const joinedSuccessfully = await this.authRepository.joinPair(
       pair.id,
       userId,
@@ -55,11 +58,15 @@ export class AuthService {
       );
     }
     const token = await this.generateJwtToken(userId);
+    const partnerPublicKey = await this.authRepository.getUserPublicKey(
+      pair.user1_id!,
+    );
 
     return {
       token,
       pairId: pair.id,
       userId,
+      partnerPublicKey,
     };
   }
 
@@ -69,5 +76,18 @@ export class AuthService {
 
   async getTokenVersion(userId: string): Promise<number> {
     return await this.authRepository.getTokenVersion(userId);
+  }
+  async getPairStatus(userId: string) {
+    const pair = await this.authRepository.findPairByUserId(userId);
+
+    if (!pair || !pair.user2_id) {
+      return { isPaired: false };
+    }
+    const partnerId = pair.user1_id === userId ? pair.user2_id : pair.user1_id;
+    const partnerPublicKey = await this.authRepository.getUserPublicKey(
+      partnerId!,
+    );
+
+    return { isPaired: true, partnerPublicKey };
   }
 }

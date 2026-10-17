@@ -5,13 +5,12 @@ import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./util/dataBaseConnector";
 import { drawingLimiter, DrawingCache, redisClient } from "./util/redisClient";
 import { readyMiddleware } from "./middleware/auth";
-import type { FcmTokenBody } from "./types/FcmTokenRequest";
+import { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
 import { NotificationService } from "./NotificationService";
 import { DrawingService } from "./drawing/DrawingService";
 import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
-import { stat } from "fs";
 
 if (process.env.FIREBASE_CREDENTIALS) {
   try {
@@ -50,17 +49,30 @@ const authService = new AuthService(authRepository);
 const requireAuth = readyMiddleware(authService);
 
 app.post("/api/auth/anonymous", async (req, res) => {
-  const result = await authService.createAnonymousUser();
+  const { publicKey } = req.body;
+  if (!publicKey) {
+    return res.status(400).send("publicKey is required");
+  }
+  const result = await authService.createAnonymousUser(publicKey);
   res.status(200).json(result);
 });
 
 app.post("/api/pairs/join", async (req, res) => {
-  const { pairCode } = req.body ?? {};
+  const { pairCode, publicKey } = req.body;
+  if (!publicKey) {
+    return res.status(400).send("publicKey is required");
+  }
   if (!pairCode) {
     return res.status(400).send("pairCode is required");
   }
 
-  const result = await authService.joinPairWithCode(pairCode);
+  const result = await authService.joinPairWithCode(pairCode, publicKey);
+  res.status(200).json(result);
+});
+
+app.get("/api/pairs/status", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const result = await authService.getPairStatus(userId);
   res.status(200).json(result);
 });
 
@@ -78,16 +90,14 @@ app.post("/api/drawings", requireAuth, drawingLimiter, async (req, res) => {
 
 app.post("/api/drawings/confirm", requireAuth, async (req, res) => {
   const senderId = req.userId!;
-  const { filekey } = req.body ?? {};
+  const { filekey, iv } = req.body ?? {};
 
   if (!filekey) {
     return res.status(400).send("filekey is required");
   }
 
-  await drawingService.confirmUploadDrawingAndNotify(senderId, filekey);
-  res
-    .status(200)
-    .send("Upload confirmed, saved to database and partner notified!");
+  await drawingService.confirmUploadDrawingAndNotify(senderId, filekey, iv);
+  res.status(200).send("Upload confirmed.");
 });
 
 app.get("/api/drawings", requireAuth, async (req, res) => {
@@ -102,9 +112,9 @@ app.get("/api/drawings", requireAuth, async (req, res) => {
 
 app.post("/api/fcm-token", requireAuth, async (req, res) => {
   const userId = req.userId!;
-  const { token } = (req.body ?? {}) as FcmTokenBody;
+  const { fcmToken } = req.body as FcmTokenBody;
 
-  await drawingService.saveFcmToken({ userId, token });
+  await drawingService.saveFcmToken({ userId, token: fcmToken });
   res.status(200).send("FCM token saved successfully");
 });
 

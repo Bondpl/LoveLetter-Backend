@@ -8,14 +8,17 @@ export class NotificationService {
     this.pool = pool;
   }
 
-  async notifyPartner(partnerDeviceToken: string) {
+  async notifyPartnerIfTokenExists(partnerId: string): Promise<void> {
+    const token = await this.getFCMToken(partnerId);
+    if (!token) return;
+
     const message = {
       data: {
         type: "NEW_DRAWING",
         title: "New Drawing",
         body: "Your partner sent you a drawing!",
       },
-      token: partnerDeviceToken,
+      token,
     };
 
     try {
@@ -27,11 +30,11 @@ export class NotificationService {
         error.code === "messaging/invalid-registration-token" ||
         error.code === "messaging/registration-token-not-registered"
       ) {
-        console.log(`Removing invalid token from DB: ${partnerDeviceToken}`);
+        console.log(`Removing invalid token from DB: ${token}`);
         try {
           await this.pool.query(
             "UPDATE users SET fcm_token = NULL WHERE fcm_token = $1",
-            [partnerDeviceToken],
+            [token],
           );
         } catch (dbErr) {
           console.error("Failed to remove invalid token from DB:", dbErr);
