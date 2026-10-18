@@ -3,7 +3,12 @@ import express from "express";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./util/dataBaseConnector";
-import { drawingLimiter, DrawingCache, redisClient } from "./util/redisClient";
+import {
+  drawingLimiter,
+  DrawingCache,
+  redisClient,
+  TokenCache,
+} from "./util/redisClient";
 import { readyMiddleware } from "./middleware/auth";
 import { FcmTokenBody } from "./types/FcmTokenRequest";
 import "./types/Auth";
@@ -33,6 +38,7 @@ const app = express();
 app.use(express.json());
 
 const drawingCache = new DrawingCache(redisClient);
+const tokenCache = new TokenCache(redisClient);
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
 const drawingRepository = new DrawingRepository(pool);
@@ -45,7 +51,7 @@ const drawingService = new DrawingService(
 );
 
 const authRepository = new AuthRepository(pool);
-const authService = new AuthService(authRepository);
+const authService = new AuthService(authRepository, tokenCache);
 const requireAuth = readyMiddleware(authService);
 
 app.post("/api/auth/anonymous", async (req, res) => {

@@ -27,7 +27,7 @@ export class DrawingRepository {
 
   async sendSignedUrl(senderId: string): Promise<SignedUrl> {
     const pairResult = await this.pool.query(
-      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
+      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
       [senderId],
     );
 
@@ -57,10 +57,13 @@ export class DrawingRepository {
     iv: string,
   ): Promise<void> {
     const pairResult = await this.pool.query(
-      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE LIMIT 1`,
+      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
       [senderId],
     );
-    if (pairResult.rows.length === 0) return;
+
+    if (pairResult.rows.length === 0) {
+      throw new AppError("Sender is not in an active pair", 403);
+    }
 
     const pairId = pairResult.rows[0].id;
     const permanentImageUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`;

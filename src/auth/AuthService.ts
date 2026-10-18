@@ -3,9 +3,13 @@ import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
 import { AppError } from "../util/appError";
 import { withTransaction } from "../util/dataBaseConnector";
+import { TokenCache } from "../util/redisClient";
 
 export class AuthService {
-  constructor(private authRepository: AuthRepository) {}
+  constructor(
+    private authRepository: AuthRepository,
+    private tokenCache: TokenCache,
+  ) {}
 
   private generatePairCode(): string {
     const randomDigits = Math.floor(100000 + Math.random() * 900000);
@@ -87,8 +91,15 @@ export class AuthService {
   }
 
   async getTokenVersion(userId: string): Promise<number> {
-    return await this.authRepository.getTokenVersion(userId);
+    const cachedVersion = await this.tokenCache.getTokenVersion(userId);
+    if (cachedVersion !== null) {
+      return cachedVersion;
+    }
+    const tokenVersion = await this.authRepository.getTokenVersion(userId);
+    await this.tokenCache.setTokenVersion(userId, tokenVersion);
+    return tokenVersion;
   }
+
   async getPairStatus(userId: string) {
     const pair = await this.authRepository.findPairByUserId(userId);
 

@@ -45,8 +45,30 @@ export class DrawingCache {
     const key = this.getPartnerDrawingKey(userId);
     await this.redis.del(key);
   }
+}
 
-  async checkJwtVersion(userId: string) {
-    const key = "jwtVersion:${userId}";
+export class TokenCache {
+  constructor(private redis: Redis) {}
+  private getTokenVersionKey(userId: string): string {
+    return `jwtVersion:${userId}`;
+  }
+
+  async getTokenVersion(userId: string) {
+    const key = this.getTokenVersionKey(userId);
+    const version = await this.redis.get(key);
+    if (version !== null) {
+      return parseInt(version, 10);
+    }
+    return null;
+  }
+
+  async setTokenVersion(userId: string, version: number) {
+    const key = this.getTokenVersionKey(userId);
+    await this.redis.set(key, JSON.stringify(version), "EX", 259200);
+  }
+
+  async clearTokenVersion(userId: string): Promise<void> {
+    const key = this.getTokenVersionKey(userId);
+    await this.redis.del(key);
   }
 }
