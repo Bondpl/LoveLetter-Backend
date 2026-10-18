@@ -45,4 +45,8 @@ export class DrawingCache {
     const key = this.getPartnerDrawingKey(userId);
     await this.redis.del(key);
   }
+
+  async checkJwtVersion(userId: string) {
+    const key = "jwtVersion:${userId}";
+  }
 }

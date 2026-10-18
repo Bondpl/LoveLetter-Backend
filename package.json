@@ -5,7 +5,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file=.env.local src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cleanup": "tsx --env-file=.env.local src/scripts/cleanupDrawings.ts"
   },
   "private": true,
   "devDependencies": {
