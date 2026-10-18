@@ -2,13 +2,14 @@ import jwt from "jsonwebtoken";
 import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
 import { AppError } from "../util/appError";
+import { withTransaction } from "../util/dataBaseConnector";
 
 export class AuthService {
   constructor(private authRepository: AuthRepository) {}
 
   private generatePairCode(): string {
     const randomDigits = Math.floor(100000 + Math.random() * 900000);
-    return `${randomDigits}`;
+    return randomDigits.toString();
   }
 
   private async generateJwtToken(userId: string): Promise<string> {
@@ -18,10 +19,14 @@ export class AuthService {
   }
 
   async createAnonymousUser(publicKey: string): Promise<AnonymousAuthResponse> {
-    const userId = await this.authRepository.createUser(publicKey);
     const pairCode = this.generatePairCode();
 
-    await this.authRepository.createPair(userId, pairCode);
+    const userId = await withTransaction(async (tx) => {
+      const id = await this.authRepository.createUser(publicKey, tx);
+      await this.authRepository.createPair(id, pairCode, tx);
+      return id;
+    });
+
     const token = await this.generateJwtToken(userId);
 
     return {
@@ -46,17 +51,24 @@ export class AuthService {
       throw new AppError("This pair is already full!", 403);
     }
 
-    const userId = await this.authRepository.createUser(publicKey);
-    const joinedSuccessfully = await this.authRepository.joinPair(
-      pair.id,
-      userId,
-    );
-    if (!joinedSuccessfully) {
-      throw new AppError(
-        "The pair was filled a millisecond ago by someone else!",
-        409,
+    const userId = await withTransaction(async (tx) => {
+      const newUserId = await this.authRepository.createUser(publicKey, tx);
+
+      const joinedSuccessfully = await this.authRepository.joinPair(
+        pair.id,
+        newUserId,
+        tx,
       );
-    }
+
+      if (!joinedSuccessfully) {
+        throw new AppError(
+          "The pair was filled a millisecond ago by someone else!",
+          409,
+        );
+      }
+      return newUserId;
+    });
+
     const token = await this.generateJwtToken(userId);
     const partnerPublicKey = await this.authRepository.getUserPublicKey(
       pair.user1_id!,

@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { PairRow } from "../types/requests";
 
 export class AuthRepository {
@@ -8,16 +8,22 @@ export class AuthRepository {
     this.pool = pool;
   }
 
-  async createUser(publicKey: string): Promise<string> {
-    const result = await this.pool.query(
+  async createUser(publicKey: string, client?: PoolClient): Promise<string> {
+    const executor = client ?? this.pool;
+    const result = await executor.query(
       `INSERT INTO users (public_key) VALUES ($1) RETURNING id`,
       [publicKey],
     );
     return result.rows[0].id;
   }
 
-  async createPair(user1Id: string, pairCode: string): Promise<string> {
-    const result = await this.pool.query(
+  async createPair(
+    user1Id: string,
+    pairCode: string,
+    client?: PoolClient,
+  ): Promise<string> {
+    const executor = client ?? this.pool;
+    const result = await executor.query(
       `INSERT INTO pairs (user1_id, pair_code) VALUES ($1, $2) RETURNING id`,
       [user1Id, pairCode],
     );
@@ -32,9 +38,14 @@ export class AuthRepository {
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 
-  async joinPair(pairId: string, user2Id: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `UPDATE pairs SET user2_id = $2 WHERE id = $1 AND user2_id IS NULL`,
+  async joinPair(
+    pairId: string,
+    user2Id: string,
+    client?: PoolClient,
+  ): Promise<boolean> {
+    const executor = client ?? this.pool;
+    const result = await executor.query(
+      `UPDATE pairs SET pair_code = NULL, user2_id = $2 WHERE id = $1 AND user2_id IS NULL`,
       [pairId, user2Id],
     );
     return result.rowCount !== null && result.rowCount > 0;

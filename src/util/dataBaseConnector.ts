@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import process from "process";
 
 if (!process.env.DATABASE_URL) {
@@ -23,3 +23,21 @@ pool.on("error", (err) => {
 pool.on("connect", () => {
   console.log("Database connected");
 });
+
+export async function withTransaction<T>(
+  callback: (tx: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
