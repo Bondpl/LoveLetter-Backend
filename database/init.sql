@@ -1,6 +1,8 @@
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     fcm_token TEXT,
+    token_version INT DEFAULT 1 NOT NULL,
+    public_key TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -8,7 +10,7 @@ CREATE TABLE IF NOT EXISTS pairs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user1_id UUID REFERENCES users(id) ON DELETE SET NULL,
     user2_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    pair_code VARCHAR(10) UNIQUE NOT NULL,
+    pair_code VARCHAR(10) UNIQUE,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -19,7 +21,8 @@ CREATE TABLE IF NOT EXISTS drawings (
     sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
     image_url TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    iv TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_drawings_cleanup ON drawings(pair_id, expires_at);

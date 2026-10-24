@@ -1,3 +1,3 @@
 export interface FcmTokenBody {
-  token: string;
+  fcmToken: string;
 }
