@@ -52,7 +52,12 @@ const drawingService = new DrawingService(
 );
 
 const authRepository = new AuthRepository(pool);
-const authService = new AuthService(authRepository, tokenCache);
+const authService = new AuthService(
+  authRepository,
+  tokenCache,
+  notificationService,
+  drawingCache,
+);
 const requireAuth = readyMiddleware(authService);
 
 app.post("/api/auth/anonymous", authLimiter, async (req, res) => {

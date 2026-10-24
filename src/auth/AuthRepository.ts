@@ -75,11 +75,22 @@ export class AuthRepository {
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 
-  async leavePair(userId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE pairs SET is_active = FALSE WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE`,
+  async leavePair(userId: string): Promise<string | null> {
+    const result = await this.pool.query(
+      `UPDATE pairs 
+       SET is_active = FALSE 
+       WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE 
+       RETURNING user1_id, user2_id`,
       [userId],
     );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const { user1_id, user2_id } = result.rows[0];
+    const partnerId = user1_id === userId ? user2_id : user1_id;
+    return partnerId ?? null;
   }
 
   async getTokenVersion(userId: string): Promise<number> {

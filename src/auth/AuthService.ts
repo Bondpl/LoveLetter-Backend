@@ -3,12 +3,15 @@ import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
 import { AppError } from "../util/appError";
 import { withTransaction } from "../util/dataBaseConnector";
-import { TokenCache } from "../util/redisClient";
+import { TokenCache, DrawingCache } from "../util/redisClient";
+import { NotificationService } from "../NotificationService";
 
 export class AuthService {
   constructor(
     private authRepository: AuthRepository,
     private tokenCache: TokenCache,
+    private notificationService: NotificationService,
+    private drawingCache?: DrawingCache,
   ) {}
 
   private generatePairCode(): string {
@@ -107,8 +110,19 @@ export class AuthService {
     };
   }
 
-  async leavePair(userId: string) {
-    await this.authRepository.leavePair(userId);
+  async leavePair(userId: string): Promise<void> {
+    const partnerId = await this.authRepository.leavePair(userId);
+
+    if (this.drawingCache) {
+      await this.drawingCache.clearDrawing(userId);
+      if (partnerId) {
+        await this.drawingCache.clearDrawing(partnerId);
+      }
+    }
+
+    if (partnerId) {
+      await this.notificationService.notifyPartnerDisconnect(partnerId);
+    }
   }
 
   async getTokenVersion(userId: string): Promise<number> {

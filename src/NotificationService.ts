@@ -8,23 +8,19 @@ export class NotificationService {
     this.pool = pool;
   }
 
-  async notifyPartnerIfTokenExists(partnerId: string): Promise<void> {
-    const token = await this.getFCMToken(partnerId);
-    if (!token) return;
-
+  private async sendDataMessage(
+    token: string,
+    data: Record<string, string>,
+  ): Promise<void> {
     const message = {
-      data: {
-        type: "NEW_DRAWING",
-        title: "New Drawing",
-        body: "Your partner sent you a drawing!",
-      },
+      data,
       token,
     };
 
     try {
       await getMessaging().send(message);
     } catch (error: any) {
-      console.error("Failed to send push notification:", error);
+      console.error(`Failed to send push notification (${data.type}):`, error);
 
       if (
         error.code === "messaging/invalid-registration-token" ||
@@ -41,6 +37,28 @@ export class NotificationService {
         }
       }
     }
+  }
+
+  async notifyPartnerIfTokenExists(partnerId: string): Promise<void> {
+    const token = await this.getFCMToken(partnerId);
+    if (!token) return;
+
+    await this.sendDataMessage(token, {
+      type: "NEW_DRAWING",
+      title: "New Drawing",
+      body: "Your partner sent you a drawing!",
+    });
+  }
+
+  async notifyPartnerDisconnect(partnerId: string): Promise<void> {
+    const token = await this.getFCMToken(partnerId);
+    if (!token) return;
+
+    await this.sendDataMessage(token, {
+      type: "PAIR_DISCONNECTED",
+      title: "Pair Disconnected",
+      body: "Your partner has left the pair.",
+    });
   }
 
   async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
