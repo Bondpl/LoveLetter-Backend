@@ -23,21 +23,42 @@ export class AuthService {
   }
 
   async createAnonymousUser(publicKey: string): Promise<AnonymousAuthResponse> {
-    const pairCode = this.generatePairCode();
+    const maxAttempts = 5;
 
-    const userId = await withTransaction(async (tx) => {
-      const id = await this.authRepository.createUser(publicKey, tx);
-      await this.authRepository.createPair(id, pairCode, tx);
-      return id;
-    });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const pairCode = this.generatePairCode();
 
-    const token = await this.generateJwtToken(userId);
+      try {
+        const userId = await withTransaction(async (tx) => {
+          await this.authRepository.cleanupExpiredPairs(tx);
 
-    return {
-      token,
-      pairCode,
-      userId,
-    };
+          const id = await this.authRepository.createUser(publicKey, tx);
+          await this.authRepository.createPair(id, pairCode, tx);
+          return id;
+        });
+
+        const token = await this.generateJwtToken(userId);
+
+        return {
+          token,
+          pairCode,
+          userId,
+        };
+      } catch (error: any) {
+        if (error.code === "23505" && attempt < maxAttempts) {
+          console.warn(
+            `Pair code collision for ${pairCode}. Retrying (${attempt}/${maxAttempts})...`,
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new AppError(
+      "Failed to generate a unique pair code. Please try again.",
+      500,
+    );
   }
 
   async joinPairWithCode(
@@ -48,7 +69,7 @@ export class AuthService {
     const pair = await this.authRepository.findPairByCode(pairCodeStr);
 
     if (!pair) {
-      throw new AppError("Invalid or inactive pair code", 400);
+      throw new AppError("Invalid or expired pair code", 400);
     }
 
     if (pair.user2_id) {

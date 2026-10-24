@@ -14,10 +14,20 @@ const s3Client = new S3Client({
     : undefined,
 });
 
-async function cleanupExpiredDrawings() {
-  console.log("Starting cleanup of expired drawings...");
+async function cleanupExpiredData() {
+  console.log("Starting cleanup of expired drawings and pair codes...");
 
   try {
+    const pairsResult = await pool.query(
+      `UPDATE pairs 
+       SET pair_code = NULL, is_active = FALSE 
+       WHERE user2_id IS NULL 
+         AND pair_code IS NOT NULL 
+         AND created_at < NOW() - INTERVAL '24 hours'
+       RETURNING id`,
+    );
+    console.log(`Cleaned up ${pairsResult.rows.length} expired pair codes.`);
+
     const result = await pool.query(
       `DELETE FROM drawings 
        WHERE expires_at <= NOW() 
@@ -25,10 +35,12 @@ async function cleanupExpiredDrawings() {
     );
 
     const expiredDrawings = result.rows;
-    console.log(`Found ${expiredDrawings.length} expired drawings in the database.`);
+    console.log(
+      `Found ${expiredDrawings.length} expired drawings in the database.`,
+    );
 
     if (expiredDrawings.length === 0) {
-      console.log("No expired drawings to delete.");
+      console.log("No expired drawings to delete from storage.");
       return;
     }
 
@@ -40,7 +52,6 @@ async function cleanupExpiredDrawings() {
       })
       .filter((key): key is string => Boolean(key));
 
-    // S3 DeleteObjects supports up to 1000 keys per request
     const CHUNK_SIZE = 1000;
     for (let i = 0; i < keysToDelete.length; i += CHUNK_SIZE) {
       const chunk = keysToDelete.slice(i, i + CHUNK_SIZE);
@@ -57,9 +68,11 @@ async function cleanupExpiredDrawings() {
       console.log(`Deleted batch of ${chunk.length} objects from storage.`);
     }
 
-    console.log(`Successfully deleted ${keysToDelete.length} files from storage.`);
+    console.log(
+      `Successfully deleted ${keysToDelete.length} files from storage.`,
+    );
   } catch (error) {
-    console.error("Error during drawing cleanup:", error);
+    console.error("Error during cleanup:", error);
     process.exitCode = 1;
   } finally {
     await pool.end();
@@ -67,4 +80,4 @@ async function cleanupExpiredDrawings() {
   }
 }
 
-cleanupExpiredDrawings();
+cleanupExpiredData();

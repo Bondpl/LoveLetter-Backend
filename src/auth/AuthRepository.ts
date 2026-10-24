@@ -30,9 +30,25 @@ export class AuthRepository {
     return result.rows[0].id;
   }
 
+  async cleanupExpiredPairs(client?: PoolClient): Promise<number> {
+    const executor = client ?? this.pool;
+    const result = await executor.query(
+      `UPDATE pairs 
+       SET pair_code = NULL, is_active = FALSE 
+       WHERE user2_id IS NULL 
+         AND pair_code IS NOT NULL 
+         AND created_at < NOW() - INTERVAL '24 hours'`,
+    );
+    return result.rowCount ?? 0;
+  }
+
   async findPairByCode(pairCode: string): Promise<PairRow | null> {
     const result = await this.pool.query(
-      `SELECT * FROM pairs WHERE pair_code = $1 AND is_active = TRUE`,
+      `SELECT * FROM pairs 
+       WHERE pair_code = $1 
+         AND is_active = TRUE 
+         AND user2_id IS NULL 
+         AND created_at >= NOW() - INTERVAL '24 hours'`,
       [pairCode],
     );
     return result.rows.length > 0 ? result.rows[0] : null;
