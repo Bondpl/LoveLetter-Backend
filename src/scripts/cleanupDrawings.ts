@@ -18,16 +18,18 @@ async function cleanupExpiredData() {
   console.log("Starting cleanup of expired drawings and pair codes...");
 
   try {
+    // 1. Cleanup expired, unjoined pairs (>10 minutes)
     const pairsResult = await pool.query(
       `UPDATE pairs 
        SET pair_code = NULL, is_active = FALSE 
        WHERE user2_id IS NULL 
          AND pair_code IS NOT NULL 
-         AND created_at < NOW() - INTERVAL '24 hours'
+         AND created_at < NOW() - INTERVAL '10 minutes'
        RETURNING id`,
     );
     console.log(`Cleaned up ${pairsResult.rows.length} expired pair codes.`);
 
+    // 2. Cleanup expired drawings (>3 days)
     const result = await pool.query(
       `DELETE FROM drawings 
        WHERE expires_at <= NOW() 

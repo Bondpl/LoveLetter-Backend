@@ -37,7 +37,7 @@ export class AuthRepository {
        SET pair_code = NULL, is_active = FALSE 
        WHERE user2_id IS NULL 
          AND pair_code IS NOT NULL 
-         AND created_at < NOW() - INTERVAL '24 hours'`,
+         AND created_at < NOW() - INTERVAL '10 minutes'`,
     );
     return result.rowCount ?? 0;
   }
@@ -48,7 +48,7 @@ export class AuthRepository {
        WHERE pair_code = $1 
          AND is_active = TRUE 
          AND user2_id IS NULL 
-         AND created_at >= NOW() - INTERVAL '24 hours'`,
+         AND created_at >= NOW() - INTERVAL '10 minutes'`,
       [pairCode],
     );
     return result.rows.length > 0 ? result.rows[0] : null;
