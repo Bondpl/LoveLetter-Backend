@@ -58,7 +58,7 @@ const requireAuth = readyMiddleware(authService);
 app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
   const { publicKey } = req.body;
   if (!publicKey) {
-    return res.status(400).send("publicKey is required");
+    return res.status(400).json({ error: "publicKey is required", status: 400 });
   }
   const result = await authService.createAnonymousUser(publicKey);
   res.status(200).json(result);
@@ -67,10 +67,10 @@ app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
 app.post("/api/pairs/join", authLimiter, async (req, res) => {
   const { pairCode, publicKey } = req.body;
   if (!publicKey) {
-    return res.status(400).send("publicKey is required");
+    return res.status(400).json({ error: "publicKey is required", status: 400 });
   }
   if (!pairCode) {
-    return res.status(400).send("pairCode is required");
+    return res.status(400).json({ error: "pairCode is required", status: 400 });
   }
 
   const result = await authService.joinPairWithCode(pairCode, publicKey);
@@ -85,14 +85,14 @@ app.get("/api/pairs/status", requireAuth, async (req, res) => {
 
 app.post("/api/pairs/leave", requireAuth, async (req, res) => {
   const userId = req.userId!;
-  const result = await authService.leavePair(userId);
-  res.status(200).json(result);
+  await authService.leavePair(userId);
+  res.status(200).json({ message: "Left pair successfully" });
 });
 
 app.post("/api/drawings", requireAuth, drawingLimiter, async (req, res) => {
   const senderId = req.userId!;
   const urlData = await drawingService.addNewDrawing(senderId);
-  res.status(200).send(urlData);
+  res.status(200).json(urlData);
 });
 
 app.post("/api/drawings/confirm", requireAuth, async (req, res) => {
@@ -100,11 +100,14 @@ app.post("/api/drawings/confirm", requireAuth, async (req, res) => {
   const { filekey, iv } = req.body ?? {};
 
   if (!filekey) {
-    return res.status(400).send("filekey is required");
+    return res.status(400).json({ error: "filekey is required", status: 400 });
+  }
+  if (!iv) {
+    return res.status(400).json({ error: "iv is required", status: 400 });
   }
 
   await drawingService.confirmUploadDrawingAndNotify(senderId, filekey, iv);
-  res.status(200).send("Upload confirmed.");
+  res.status(200).json({ message: "Upload confirmed." });
 });
 
 app.get("/api/drawings", requireAuth, async (req, res) => {
@@ -114,7 +117,7 @@ app.get("/api/drawings", requireAuth, async (req, res) => {
   if (drawingUrl) {
     return res.status(200).json({ drawingUrl });
   }
-  res.status(404).send("No new drawings found");
+  res.status(404).json({ error: "No new drawings found", status: 404 });
 });
 
 app.post("/api/fcm-token", requireAuth, async (req, res) => {
@@ -122,7 +125,7 @@ app.post("/api/fcm-token", requireAuth, async (req, res) => {
   const { fcmToken } = req.body as FcmTokenBody;
 
   await drawingService.saveFcmToken({ userId, token: fcmToken });
-  res.status(200).send("FCM token saved successfully");
+  res.status(200).json({ message: "FCM token saved successfully" });
 });
 
 app.use((err: any, req: any, res: any, next: any) => {

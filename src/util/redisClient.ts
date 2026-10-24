@@ -11,9 +11,10 @@ redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
 export const drawingLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-
   max: 6,
-  message: "Limit rate exceeded.",
+  message: { error: "Rate limit exceeded. Try again in a minute.", status: 429 },
+  standardHeaders: true,
+  legacyHeaders: false,
   keyGenerator: (req: any) => {
     return req.userId;
   },
@@ -76,7 +77,10 @@ export class TokenCache {
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: "Too many accounts created from this IP, please try again later.",
+  message: {
+    error: "Too many accounts created from this IP, please try again later.",
+    status: 429,
+  },
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({

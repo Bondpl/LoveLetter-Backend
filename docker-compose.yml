@@ -36,7 +36,6 @@ services:
       - .env.local
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/loveletter
-      - REDIS_URL=redis://redis:6379
 volumes:
   postgres_data:
   redis_data:
