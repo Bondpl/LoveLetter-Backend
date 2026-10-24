@@ -8,6 +8,7 @@ import {
   DrawingCache,
   redisClient,
   TokenCache,
+  authLimiter,
 } from "./util/redisClient";
 import { readyMiddleware } from "./middleware/auth";
 import { FcmTokenBody } from "./types/FcmTokenRequest";
@@ -34,7 +35,7 @@ if (process.env.FIREBASE_CREDENTIALS) {
 }
 
 const app = express();
-
+app.set("trust proxy", 1);
 app.use(express.json());
 
 const drawingCache = new DrawingCache(redisClient);
@@ -54,7 +55,7 @@ const authRepository = new AuthRepository(pool);
 const authService = new AuthService(authRepository, tokenCache);
 const requireAuth = readyMiddleware(authService);
 
-app.post("/api/auth/anonymous", async (req, res) => {
+app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
   const { publicKey } = req.body;
   if (!publicKey) {
     return res.status(400).send("publicKey is required");
@@ -63,7 +64,7 @@ app.post("/api/auth/anonymous", async (req, res) => {
   res.status(200).json(result);
 });
 
-app.post("/api/pairs/join", async (req, res) => {
+app.post("/api/pairs/join", authLimiter, async (req, res) => {
   const { pairCode, publicKey } = req.body;
   if (!publicKey) {
     return res.status(400).send("publicKey is required");

@@ -72,3 +72,15 @@ export class TokenCache {
     await this.redis.del(key);
   }
 }
+
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many accounts created from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new RedisStore({
+    sendCommand: (...args: string[]) =>
+      redisClient.call(args[0]!, ...args.slice(1)) as any,
+  }),
+});
