@@ -3,6 +3,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./util/dataBaseConnector";
+import { s3Client } from "./util/s3Client";
 import {
   drawingLimiter,
   DrawingCache,
@@ -17,6 +18,7 @@ import { NotificationService } from "./NotificationService";
 import { DrawingService } from "./drawing/DrawingService";
 import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
+import { CleanupService } from "./cleanup/CleanupService";
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not configured.");
@@ -57,7 +59,7 @@ const drawingCache = new DrawingCache(redisClient);
 const tokenCache = new TokenCache(redisClient);
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
 
-const drawingRepository = new DrawingRepository(pool);
+const drawingRepository = new DrawingRepository(pool, s3Client);
 const notificationService = new NotificationService(pool);
 
 const drawingService = new DrawingService(
@@ -74,6 +76,10 @@ const authService = new AuthService(
   drawingCache,
 );
 const requireAuth = readyMiddleware(authService);
+
+// Automated in-app cleanup for expired drawings (PostgreSQL + S3) and stale pair codes
+const cleanupService = new CleanupService(pool, s3Client);
+cleanupService.startScheduler();
 
 app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
   const { publicKey } = req.body;
@@ -186,6 +192,9 @@ const gracefulShutdown = async (signal: string) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`\nReceived ${signal}. Gracefully shutting down...`);
+
+  // Stop automated cleanup scheduler
+  cleanupService.stopScheduler();
 
   const forceExitTimeout = setTimeout(() => {
     console.error("Graceful shutdown timed out. Forcing exit...");

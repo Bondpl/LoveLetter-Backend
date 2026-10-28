@@ -1,28 +1,18 @@
 import { Pool } from "pg";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
 import { Drawing } from "../types/Drawing";
 import { AppError } from "../util/appError";
+import { s3Client as defaultS3Client } from "../util/s3Client";
 
 export class DrawingRepository {
   private pool: Pool;
   private s3Client: S3Client;
 
-  constructor(pool: Pool) {
+  constructor(pool: Pool, s3?: S3Client) {
     this.pool = pool;
-
-    this.s3Client = new S3Client({
-      region: process.env.S3_REGION || "us-east-1",
-      endpoint: process.env.S3_ENDPOINT,
-      forcePathStyle: true,
-      credentials: process.env.S3_ACCESS_KEY_ID
-        ? {
-            accessKeyId: process.env.S3_ACCESS_KEY_ID,
-            secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "",
-          }
-        : undefined,
-    });
+    this.s3Client = s3 ?? defaultS3Client;
   }
 
   async sendSignedUrl(senderId: string): Promise<SignedUrl> {
@@ -66,14 +56,35 @@ export class DrawingRepository {
     }
 
     const pairId = pairResult.rows[0].id;
-    const permanentImageUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`;
+
+    // Validate that the fileKey belongs to this pair's drawings directory
+    if (!fileKey.startsWith(`drawings/${pairId}/`)) {
+      throw new AppError("Invalid file key for this pair", 400);
+    }
+
+    // Verify that the object actually exists in S3 before inserting into database
+    try {
+      await this.s3Client.send(
+        new HeadObjectCommand({
+          Bucket: process.env.S3_BUCKET_NAME,
+          Key: fileKey,
+        }),
+      );
+    } catch (err: any) {
+      if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
+        throw new AppError("Uploaded file not found in storage", 400);
+      }
+      throw err;
+    }
+
+    // Build public/endpoint URL compatible with both custom S3 endpoints (MinIO) and standard AWS S3
+    const permanentImageUrl = process.env.S3_ENDPOINT
+      ? `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`
+      : `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION || "us-east-1"}.amazonaws.com/${fileKey}`;
 
     await this.pool.query(
-      `WITH cleanup AS (                                                                                  
-             DELETE FROM drawings WHERE expires_at <= NOW()                                                   
-           )                                                                                                  
-           INSERT INTO drawings(pair_id, sender_id, image_url, expires_at, iv)                                    
-           VALUES($1, $2, $3, NOW() + INTERVAL '3 days', $4)`,
+      `INSERT INTO drawings(pair_id, sender_id, image_url, expires_at, iv)                                    
+       VALUES($1, $2, $3, NOW() + INTERVAL '3 days', $4)`,
       [pairId, senderId, permanentImageUrl, iv],
     );
   }
