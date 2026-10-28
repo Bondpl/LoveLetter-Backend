@@ -102,6 +102,19 @@ export class AuthRepository {
     return result.rows[0].token_version;
   }
 
+  async incrementTokenVersion(
+    userId: string,
+    client?: PoolClient,
+  ): Promise<number> {
+    const executor = client ?? this.pool;
+    const result = await executor.query(
+      "UPDATE users SET token_version = token_version + 1 WHERE id = $1 RETURNING token_version",
+      [userId],
+    );
+
+    return result.rows.length > 0 ? result.rows[0].token_version : 0;
+  }
+
   async getUserPublicKey(userId: string): Promise<string> {
     const result = await this.pool.query(
       `SELECT public_key FROM users WHERE id = $1`,

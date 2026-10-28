@@ -117,6 +117,15 @@ export class AuthService {
   async leavePair(userId: string): Promise<void> {
     const partnerId = await this.authRepository.leavePair(userId);
 
+    // Invalidate JWT tokens so old credentials can no longer be used
+    await this.authRepository.incrementTokenVersion(userId);
+    await this.tokenCache.clearTokenVersion(userId);
+
+    if (partnerId) {
+      await this.authRepository.incrementTokenVersion(partnerId);
+      await this.tokenCache.clearTokenVersion(partnerId);
+    }
+
     if (this.drawingCache) {
       await this.drawingCache.clearDrawing(userId);
       if (partnerId) {
