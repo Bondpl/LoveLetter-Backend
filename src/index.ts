@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
+import helmet from "helmet";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./util/dataBaseConnector";
@@ -43,6 +44,7 @@ if (process.env.FIREBASE_CREDENTIALS) {
 
 const app = express();
 app.set("trust proxy", 1);
+app.use(helmet());
 app.use(express.json());
 
 app.get("/health", async (_req, res) => {
