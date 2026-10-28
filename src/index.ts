@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
 import { pool } from "./util/dataBaseConnector";
@@ -17,6 +17,11 @@ import { NotificationService } from "./NotificationService";
 import { DrawingService } from "./drawing/DrawingService";
 import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
+
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is not configured.");
+  process.exit(1);
+}
 
 if (process.env.FIREBASE_CREDENTIALS) {
   try {
@@ -37,6 +42,16 @@ if (process.env.FIREBASE_CREDENTIALS) {
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
+
+app.get("/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    await redisClient.ping();
+    res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(503).json({ status: "unhealthy", error: err.message });
+  }
+});
 
 const drawingCache = new DrawingCache(redisClient);
 const tokenCache = new TokenCache(redisClient);
@@ -133,16 +148,76 @@ app.post("/api/fcm-token", requireAuth, async (req, res) => {
   res.status(200).json({ message: "FCM token saved successfully" });
 });
 
-app.use((err: any, req: any, res: any, next: any) => {
-  console.error("Global Error:", err.message);
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) {
+    return next(err);
+  }
 
-  const status = err.status || 500;
-  res.status(status).json({
-    error: err.message,
-    status: status,
+  const status =
+    typeof err.status === "number" && err.status >= 400 && err.status < 600
+      ? err.status
+      : 500;
+
+  if (status >= 500) {
+    console.error(`[${new Date().toISOString()}] Internal Server Error:`, err);
+    const message =
+      process.env.NODE_ENV === "production"
+        ? "Internal server error"
+        : err.message || "Internal server error";
+    return res.status(status).json({
+      error: message,
+      status,
+    });
+  }
+
+  return res.status(status).json({
+    error: err.message || "An unexpected error occurred",
+    status,
   });
 });
 
-app.listen(port, "0.0.0.0", () => {
+const server = app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${port}`);
 });
+
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\nReceived ${signal}. Gracefully shutting down...`);
+
+  const forceExitTimeout = setTimeout(() => {
+    console.error("Graceful shutdown timed out. Forcing exit...");
+    process.exit(1);
+  }, 10000);
+  forceExitTimeout.unref();
+
+  server.close(async (err) => {
+    if (err) {
+      console.error("Error while closing HTTP server:", err);
+    } else {
+      console.log("HTTP server closed to new requests.");
+    }
+
+    try {
+      await pool.end();
+      console.log("PostgreSQL connection pool closed.");
+    } catch (poolErr) {
+      console.error("Error closing database pool:", poolErr);
+    }
+
+    try {
+      await redisClient.quit();
+      console.log("Redis client connection closed.");
+    } catch (redisErr) {
+      console.error("Error closing Redis connection:", redisErr);
+    }
+
+    console.log("Graceful shutdown completed.");
+    process.exit(0);
+  });
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

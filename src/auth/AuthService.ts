@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
@@ -15,12 +16,15 @@ export class AuthService {
   ) {}
 
   private generatePairCode(): string {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
+    const randomDigits = crypto.randomInt(100000, 1000000);
     return randomDigits.toString();
   }
 
   private async generateJwtToken(userId: string): Promise<string> {
-    const secret = process.env.JWT_SECRET || "local_jwt_secret_key";
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error("JWT_SECRET environment variable is not configured");
+    }
     const tokenVersion = await this.getTokenVersion(userId);
     return jwt.sign({ userId, tokenVersion }, secret, { expiresIn: "10y" });
   }
