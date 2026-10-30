@@ -50,7 +50,10 @@ export class NotificationService {
     });
   }
 
-  async notifyPartnerDisconnect(partnerId: string): Promise<void> {
+  async notifyPartnerDisconnect(
+    partnerId: string,
+    pairId: string,
+  ): Promise<void> {
     const token = await this.getFCMToken(partnerId);
     if (!token) return;
 
@@ -58,10 +61,17 @@ export class NotificationService {
       type: "PAIR_DISCONNECTED",
       title: "Pair Disconnected",
       body: "Your partner has left the pair.",
+      pairId,
     });
   }
 
   async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
+    // Clear this FCM token from any other user rows to prevent duplicate notifications
+    await this.pool.query(
+      `UPDATE users SET fcm_token = NULL WHERE fcm_token = $1 AND id != $2`,
+      [fcmToken, userId],
+    );
+
     await this.pool.query(`UPDATE users SET fcm_token = $2 WHERE id = $1`, [
       userId,
       fcmToken,
@@ -74,5 +84,12 @@ export class NotificationService {
       [userId],
     );
     return result.rows.length > 0 ? result.rows[0].fcm_token : null;
+  }
+
+  async clearFCMToken(userId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE users SET fcm_token = NULL WHERE id = $1`,
+      [userId],
+    );
   }
 }
