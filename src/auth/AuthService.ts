@@ -115,7 +115,13 @@ export class AuthService {
   }
 
   async leavePair(userId: string): Promise<void> {
-    const partnerId = await this.authRepository.leavePair(userId);
+    const { partnerId, pairId } = await this.authRepository.leavePair(userId);
+
+    // Clear FCM tokens so old user rows don't receive stale notifications
+    await this.notificationService.clearFCMToken(userId);
+    if (partnerId) {
+      await this.notificationService.clearFCMToken(partnerId);
+    }
 
     // Invalidate JWT tokens so old credentials can no longer be used
     await this.authRepository.incrementTokenVersion(userId);
@@ -133,8 +139,8 @@ export class AuthService {
       }
     }
 
-    if (partnerId) {
-      await this.notificationService.notifyPartnerDisconnect(partnerId);
+    if (partnerId && pairId) {
+      await this.notificationService.notifyPartnerDisconnect(partnerId, pairId);
     }
   }
 
