@@ -1,10 +1,19 @@
 import { Pool } from "pg";
-import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
 import { Drawing } from "../types/Drawing";
 import { AppError } from "../util/appError";
 import { s3Client as defaultS3Client } from "../util/s3Client";
+
+const MAX_DRAWING_SIZE_BYTES = process.env.MAX_DRAWING_SIZE_BYTES
+  ? parseInt(process.env.MAX_DRAWING_SIZE_BYTES, 10)
+  : 5 * 1024 * 1024; // Default 5 MB
 
 export class DrawingRepository {
   private pool: Pool;
@@ -63,8 +72,9 @@ export class DrawingRepository {
     }
 
     // Verify that the object actually exists in S3 before inserting into database
+    let headResult;
     try {
-      await this.s3Client.send(
+      headResult = await this.s3Client.send(
         new HeadObjectCommand({
           Bucket: process.env.S3_BUCKET_NAME,
           Key: fileKey,
@@ -77,10 +87,34 @@ export class DrawingRepository {
       throw err;
     }
 
+    // Verify file size limit (max 5 MB)
+    if (
+      headResult.ContentLength &&
+      headResult.ContentLength > MAX_DRAWING_SIZE_BYTES
+    ) {
+      try {
+        await this.s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: fileKey,
+          }),
+        );
+      } catch (deleteErr) {
+        console.error(
+          `Failed to delete oversized file ${fileKey} from S3:`,
+          deleteErr,
+        );
+      }
+      throw new AppError(
+        `File size exceeds the allowed limit of ${Math.round(MAX_DRAWING_SIZE_BYTES / (1024 * 1024))} MB`,
+        400,
+      );
+    }
+
     // Build public/endpoint URL compatible with both custom S3 endpoints (MinIO) and standard AWS S3
     const permanentImageUrl = process.env.S3_ENDPOINT
       ? `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`
-      : `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION || "us-east-1"}.amazonaws.com/${fileKey}`;
+      : `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION || "us-trump-1"}.amazonaws.com/${fileKey}`;
 
     await this.pool.query(
       `INSERT INTO drawings(pair_id, sender_id, image_url, expires_at, iv)                                    
