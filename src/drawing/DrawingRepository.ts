@@ -8,7 +8,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
 import { Drawing } from "../types/Drawing";
-import { AppError } from "../util/appError";
+import { AppError, ErrorCode } from "../util/appError";
 import { s3Client as defaultS3Client } from "../util/s3Client";
 
 const MAX_DRAWING_SIZE_BYTES = process.env.MAX_DRAWING_SIZE_BYTES
@@ -31,7 +31,11 @@ export class DrawingRepository {
     );
 
     if (pairResult.rows.length === 0) {
-      throw new AppError("Sender is not in an active pair", 403);
+      throw new AppError(
+        ErrorCode.NOT_IN_PAIR,
+        "Sender is not in an active pair",
+        403,
+      );
     }
 
     const pairId = pairResult.rows[0].id;
@@ -61,14 +65,22 @@ export class DrawingRepository {
     );
 
     if (pairResult.rows.length === 0) {
-      throw new AppError("Sender is not in an active pair", 403);
+      throw new AppError(
+        ErrorCode.NOT_IN_PAIR,
+        "Sender is not in an active pair",
+        403,
+      );
     }
 
     const pairId = pairResult.rows[0].id;
 
     // Validate that the fileKey belongs to this pair's drawings directory
     if (!fileKey.startsWith(`drawings/${pairId}/`)) {
-      throw new AppError("Invalid file key for this pair", 400);
+      throw new AppError(
+        ErrorCode.INVALID_FILE_KEY,
+        "Invalid file key for this pair",
+        400,
+      );
     }
 
     // Verify that the object actually exists in S3 before inserting into database
@@ -82,7 +94,11 @@ export class DrawingRepository {
       );
     } catch (err: any) {
       if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
-        throw new AppError("Uploaded file not found in storage", 400);
+        throw new AppError(
+          ErrorCode.FILE_NOT_FOUND,
+          "Uploaded file not found in storage",
+          400,
+        );
       }
       throw err;
     }
@@ -106,6 +122,7 @@ export class DrawingRepository {
         );
       }
       throw new AppError(
+        ErrorCode.FILE_TOO_LARGE,
         `File size exceeds the allowed limit of ${Math.round(MAX_DRAWING_SIZE_BYTES / (1024 * 1024))} MB`,
         400,
       );
