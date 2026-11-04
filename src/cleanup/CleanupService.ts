@@ -12,7 +12,9 @@ export class CleanupService {
 
   async runCleanup(): Promise<void> {
     if (this.isCleaning) {
-      console.log("[Cleanup] Previous cleanup task still in progress. Skipping.");
+      console.log(
+        "[Cleanup] Previous cleanup task still in progress. Skipping.",
+      );
       return;
     }
 
@@ -28,7 +30,25 @@ export class CleanupService {
          RETURNING id`,
       );
       if (pairsResult.rows.length > 0) {
-        console.log(`[Cleanup] Cleaned up ${pairsResult.rows.length} expired pair codes.`);
+        console.log(
+          `[Cleanup] Cleaned up ${pairsResult.rows.length} expired pair codes.`,
+        );
+      }
+
+      const deletedPairs = await this.pool.query(
+        `DELETE FROM pairs 
+         WHERE is_active = FALSE 
+           AND created_at < NOW() - INTERVAL '1 hour'
+           AND (
+             user2_id IS NULL 
+             OR NOT EXISTS (SELECT 1 FROM drawings WHERE drawings.pair_id = pairs.id)
+           )
+         RETURNING id`,
+      );
+      if (deletedPairs.rows.length > 0) {
+        console.log(
+          `[Cleanup] Deleted ${deletedPairs.rows.length} inactive pairs.`,
+        );
       }
 
       // 2. Cleanup expired drawings from PostgreSQL and return URLs
@@ -43,7 +63,9 @@ export class CleanupService {
         return;
       }
 
-      console.log(`[Cleanup] Found ${expiredDrawings.length} expired drawings to delete.`);
+      console.log(
+        `[Cleanup] Found ${expiredDrawings.length} expired drawings to delete.`,
+      );
 
       // 3. Extract S3 keys
       const keysToDelete = expiredDrawings
@@ -60,7 +82,9 @@ export class CleanupService {
 
       const bucketName = process.env.S3_BUCKET_NAME;
       if (!bucketName) {
-        console.warn("[Cleanup] S3_BUCKET_NAME is not set. Skipping S3 deletion.");
+        console.warn(
+          "[Cleanup] S3_BUCKET_NAME is not set. Skipping S3 deletion.",
+        );
         return;
       }
 
@@ -76,12 +100,19 @@ export class CleanupService {
             },
           }),
         );
-        console.log(`[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`);
+        console.log(
+          `[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`,
+        );
       }
 
-      console.log(`[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`);
+      console.log(
+        `[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`,
+      );
     } catch (error) {
-      console.error("[Cleanup] Error during automated cleanup execution:", error);
+      console.error(
+        "[Cleanup] Error during automated cleanup execution:",
+        error,
+      );
     } finally {
       this.isCleaning = false;
     }

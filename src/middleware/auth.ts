@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { JwtPayload } from "../types/Auth";
 import { AuthService } from "../auth/AuthService";
-import { AppError } from "../util/appError";
+import { AppError, ErrorCode } from "../util/appError";
 
 export const readyMiddleware = (authService: AuthService) => {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -12,16 +12,24 @@ export const readyMiddleware = (authService: AuthService) => {
       const token = authHeader.split(" ")[1];
 
       if (!token) {
-        return res
-          .status(401)
-          .json({ error: "Unauthorized: Malformed Bearer Token", status: 401 });
+        return next(
+          new AppError(
+            ErrorCode.UNAUTHORIZED,
+            "Unauthorized: Malformed Bearer Token",
+            401,
+          ),
+        );
       }
 
       const secret = process.env.JWT_SECRET;
       if (!secret) {
-        return res
-          .status(500)
-          .json({ error: "Internal server error: JWT secret not configured", status: 500 });
+        return next(
+          new AppError(
+            ErrorCode.INTERNAL_ERROR,
+            "Internal server error: JWT secret not configured",
+            500,
+          ),
+        );
       }
 
       try {
@@ -32,9 +40,12 @@ export const readyMiddleware = (authService: AuthService) => {
         );
 
         if (currentTokenVersion !== Number(decoded.tokenVersion)) {
-          throw new AppError(
-            "Token has been revoked or user doesn't exist",
-            401,
+          return next(
+            new AppError(
+              ErrorCode.TOKEN_REVOKED,
+              "Token has been revoked or user doesn't exist",
+              401,
+            ),
           );
         }
 
@@ -42,18 +53,24 @@ export const readyMiddleware = (authService: AuthService) => {
         return next();
       } catch (err) {
         if (err instanceof AppError) {
-          return res
-            .status(err.status)
-            .json({ error: err.message, status: err.status });
+          return next(err);
         }
-        return res
-          .status(401)
-          .json({ error: "Invalid or expired JWT token", status: 401 });
+        return next(
+          new AppError(
+            ErrorCode.UNAUTHORIZED,
+            "Invalid or expired JWT token",
+            401,
+          ),
+        );
       }
     } else {
-      return res
-        .status(401)
-        .json({ error: "Unauthorized: Missing Bearer Token", status: 401 });
+      return next(
+        new AppError(
+          ErrorCode.UNAUTHORIZED,
+          "Unauthorized: Missing Bearer Token",
+          401,
+        ),
+      );
     }
   };
 };

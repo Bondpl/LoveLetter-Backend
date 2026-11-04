@@ -3,7 +3,7 @@ import { NotificationService } from "../NotificationService";
 import { SaveFcmTokenInput } from "../types/requests";
 import { SignedUrl } from "../types/SignedUrl";
 import { Drawing } from "../types/Drawing";
-import { AppError } from "../util/appError";
+import { AppError, ErrorCode } from "../util/appError";
 import { DrawingCache } from "../util/redisClient";
 
 export class DrawingService {
@@ -45,7 +45,11 @@ export class DrawingService {
 
   async saveFcmToken(FcmTokenRequest: SaveFcmTokenInput): Promise<void> {
     if (!FcmTokenRequest.token) {
-      throw new AppError("FCM token is required", 400);
+      throw new AppError(
+        ErrorCode.FCM_TOKEN_REQUIRED,
+        "FCM token is required",
+        400,
+      );
     }
 
     await this.notificationService.saveFCMToken(
