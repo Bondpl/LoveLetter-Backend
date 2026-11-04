@@ -6,7 +6,7 @@ export const config = {
     // Auth endpoints (/api/auth/anonymous, /api/pairs/join)
     // Prod: 6 req/min
     // Dev: 60 req/min
-    authMax: isProduction ? 6 : 60,
+    authMax: isProduction ? 6 : 8,
     authWindowMs: 60 * 1000, // 1 minute
 
     // Drawing upload requests
