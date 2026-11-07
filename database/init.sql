@@ -26,5 +26,8 @@ CREATE TABLE IF NOT EXISTS drawings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_drawings_cleanup ON drawings(pair_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_drawings_expires_at ON drawings(expires_at);
 CREATE INDEX IF NOT EXISTS idx_pairs_code_lookup ON pairs(pair_code) WHERE is_active = TRUE AND user2_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_pairs_cleanup ON pairs(created_at) WHERE user2_id IS NULL AND pair_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pairs_user1_active ON pairs(user1_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_pairs_user2_active ON pairs(user2_id) WHERE is_active = TRUE;

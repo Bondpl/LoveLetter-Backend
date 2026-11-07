@@ -25,6 +25,7 @@ import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
 import { CleanupService } from "./cleanup/CleanupService";
 import { AppError, ErrorCode } from "./util/appError";
+import { config } from "./config";
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not configured.");
@@ -204,7 +205,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (status >= 500) {
     console.error(`[${new Date().toISOString()}] Internal Server Error:`, err);
     const message =
-      process.env.NODE_ENV === "production"
+      config.isProduction
         ? "Internal server error"
         : err.message || "Internal server error";
     return res.status(status).json({

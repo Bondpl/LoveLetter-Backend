@@ -23,9 +23,12 @@ export class DrawingService {
     fileKey: string,
     iv: string,
   ): Promise<void> {
-    await this.drawingRepository.confirmDrawing(senderId, fileKey, iv);
+    const { partnerId } = await this.drawingRepository.confirmDrawing(
+      senderId,
+      fileKey,
+      iv,
+    );
 
-    const partnerId = await this.drawingRepository.getPartnerId(senderId);
     if (!partnerId) return;
 
     await this.drawingCache.clearDrawing(partnerId);

@@ -58,9 +58,9 @@ export class DrawingRepository {
     senderId: string,
     fileKey: string,
     iv: string,
-  ): Promise<void> {
+  ): Promise<{ partnerId: string }> {
     const pairResult = await this.pool.query(
-      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
+      `SELECT id, user1_id, user2_id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
       [senderId],
     );
 
@@ -72,7 +72,8 @@ export class DrawingRepository {
       );
     }
 
-    const pairId = pairResult.rows[0].id;
+    const { id: pairId, user1_id, user2_id } = pairResult.rows[0];
+    const partnerId = user1_id === senderId ? user2_id : user1_id;
 
     // Validate that the fileKey belongs to this pair's drawings directory
     if (!fileKey.startsWith(`drawings/${pairId}/`)) {
@@ -131,13 +132,15 @@ export class DrawingRepository {
     // Build public/endpoint URL compatible with both custom S3 endpoints (MinIO) and standard AWS S3
     const permanentImageUrl = process.env.S3_ENDPOINT
       ? `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET_NAME}/${fileKey}`
-      : `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION || "us-trump-1"}.amazonaws.com/${fileKey}`;
+      : `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION || "us-east-1"}.amazonaws.com/${fileKey}`;
 
     await this.pool.query(
       `INSERT INTO drawings(pair_id, sender_id, image_url, expires_at, iv)                                    
        VALUES($1, $2, $3, NOW() + INTERVAL '3 days', $4)`,
       [pairId, senderId, permanentImageUrl, iv],
     );
+
+    return { partnerId };
   }
 
   async getLatestDrawing(myUserId: string): Promise<Drawing | null> {

@@ -51,14 +51,14 @@ export class CleanupService {
         );
       }
 
-      // 2. Cleanup expired drawings from PostgreSQL and return URLs
-      const result = await this.pool.query(
-        `DELETE FROM drawings 
+      // 2. Cleanup expired drawings: fetch expired records first
+      const selectResult = await this.pool.query(
+        `SELECT id, image_url FROM drawings 
          WHERE expires_at <= NOW() 
-         RETURNING image_url`,
+         LIMIT 1000`,
       );
 
-      const expiredDrawings = result.rows;
+      const expiredDrawings = selectResult.rows;
       if (expiredDrawings.length === 0) {
         return;
       }
@@ -68,45 +68,53 @@ export class CleanupService {
       );
 
       // 3. Extract S3 keys
-      const keysToDelete = expiredDrawings
-        .map((row) => {
-          const url = row.image_url as string;
-          const drawingsIndex = url.indexOf("drawings/");
-          return drawingsIndex !== -1 ? url.substring(drawingsIndex) : null;
-        })
+      const itemsToDelete = expiredDrawings.map((row) => {
+        const url = row.image_url as string;
+        const drawingsIndex = url.lastIndexOf("drawings/");
+        const key = drawingsIndex !== -1 ? url.substring(drawingsIndex) : null;
+        return { id: row.id as number, key };
+      });
+
+      const keysToDelete = itemsToDelete
+        .map((item) => item.key)
         .filter((key): key is string => Boolean(key));
 
-      if (keysToDelete.length === 0) {
-        return;
-      }
-
       const bucketName = process.env.S3_BUCKET_NAME;
-      if (!bucketName) {
+
+      // 4. Delete from S3 first so we don't orphan files if S3 fails
+      if (keysToDelete.length > 0 && bucketName) {
+        const CHUNK_SIZE = 1000;
+        for (let i = 0; i < keysToDelete.length; i += CHUNK_SIZE) {
+          const chunk = keysToDelete.slice(i, i + CHUNK_SIZE);
+          await this.s3Client.send(
+            new DeleteObjectsCommand({
+              Bucket: bucketName,
+              Delete: {
+                Objects: chunk.map((Key) => ({ Key })),
+              },
+            }),
+          );
+          console.log(
+            `[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`,
+          );
+        }
+        console.log(
+          `[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`,
+        );
+      } else if (!bucketName && keysToDelete.length > 0) {
         console.warn(
           "[Cleanup] S3_BUCKET_NAME is not set. Skipping S3 deletion.",
         );
-        return;
       }
 
-      // 4. Batch delete from S3 (max 1000 per request according to S3 specs)
-      const CHUNK_SIZE = 1000;
-      for (let i = 0; i < keysToDelete.length; i += CHUNK_SIZE) {
-        const chunk = keysToDelete.slice(i, i + CHUNK_SIZE);
-        await this.s3Client.send(
-          new DeleteObjectsCommand({
-            Bucket: bucketName,
-            Delete: {
-              Objects: chunk.map((Key) => ({ Key })),
-            },
-          }),
-        );
-        console.log(
-          `[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`,
-        );
-      }
-
+      // 5. Delete successfully processed records from PostgreSQL
+      const idsToDelete = itemsToDelete.map((item) => item.id);
+      await this.pool.query(
+        `DELETE FROM drawings WHERE id = ANY($1::int[])`,
+        [idsToDelete],
+      );
       console.log(
-        `[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`,
+        `[Cleanup] Deleted ${idsToDelete.length} drawing records from database.`,
       );
     } catch (error) {
       console.error(
