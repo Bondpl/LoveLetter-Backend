@@ -80,7 +80,7 @@ export class AuthRepository {
   ): Promise<{ partnerId: string | null; pairId: string | null }> {
     const result = await this.pool.query(
       `UPDATE pairs 
-       SET is_active = FALSE 
+       SET is_active = FALSE, pair_code = NULL 
        WHERE (user1_id = $1 OR user2_id = $1) AND is_active = TRUE 
        RETURNING id, user1_id, user2_id`,
       [userId],
