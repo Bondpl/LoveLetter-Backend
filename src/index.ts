@@ -1,5 +1,9 @@
 import "dotenv/config";
-import express, { type Request, type Response, type NextFunction } from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import helmet from "helmet";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
@@ -52,7 +56,9 @@ app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     await redisClient.ping();
-    res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+    res
+      .status(200)
+      .json({ status: "healthy", timestamp: new Date().toISOString() });
   } catch (err: any) {
     res.status(503).json({ status: "unhealthy", error: err.message });
   }
@@ -80,14 +86,17 @@ const authService = new AuthService(
 );
 const requireAuth = readyMiddleware(authService);
 
-// Automated in-app cleanup for expired drawings (PostgreSQL + S3) and stale pair codes
 const cleanupService = new CleanupService(pool, s3Client);
 cleanupService.startScheduler();
 
 app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
   const { publicKey } = req.body ?? {};
   if (!publicKey) {
-    throw new AppError(ErrorCode.VALIDATION_ERROR, "publicKey is required", 400);
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "publicKey is required",
+      400,
+    );
   }
   const result = await authService.createAnonymousUser(publicKey);
   res.status(200).json(result);
@@ -96,7 +105,11 @@ app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
 app.post("/api/pairs/join", authLimiter, async (req, res) => {
   const { pairCode, publicKey } = req.body ?? {};
   if (!publicKey) {
-    throw new AppError(ErrorCode.VALIDATION_ERROR, "publicKey is required", 400);
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "publicKey is required",
+      400,
+    );
   }
   if (!pairCode) {
     throw new AppError(ErrorCode.VALIDATION_ERROR, "pairCode is required", 400);
@@ -171,8 +184,11 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     });
   }
 
-  // Handle express json parsing error
-  if (err instanceof SyntaxError && "body" in err && (err as any).status === 400) {
+  if (
+    err instanceof SyntaxError &&
+    "body" in err &&
+    (err as any).status === 400
+  ) {
     return res.status(400).json({
       code: ErrorCode.VALIDATION_ERROR,
       error: "Malformed JSON payload in request body",
@@ -216,7 +232,6 @@ const gracefulShutdown = async (signal: string) => {
   isShuttingDown = true;
   console.log(`\nReceived ${signal}. Gracefully shutting down...`);
 
-  // Stop automated cleanup scheduler
   cleanupService.stopScheduler();
 
   const forceExitTimeout = setTimeout(() => {

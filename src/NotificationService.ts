@@ -66,7 +66,6 @@ export class NotificationService {
   }
 
   async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
-    // Clear this FCM token from any other user rows to prevent duplicate notifications
     await this.pool.query(
       `UPDATE users SET fcm_token = NULL WHERE fcm_token = $1 AND id != $2`,
       [fcmToken, userId],
@@ -87,9 +86,8 @@ export class NotificationService {
   }
 
   async clearFCMToken(userId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE users SET fcm_token = NULL WHERE id = $1`,
-      [userId],
-    );
+    await this.pool.query(`UPDATE users SET fcm_token = NULL WHERE id = $1`, [
+      userId,
+    ]);
   }
 }
