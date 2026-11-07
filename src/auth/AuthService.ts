@@ -120,6 +120,18 @@ export class AuthService {
       pair.user1_id!,
     );
 
+    if (pair.user1_id) {
+      try {
+        await this.notificationService.notifyPartnerJoined(
+          pair.user1_id,
+          pair.id,
+          publicKey,
+        );
+      } catch (err) {
+        console.error("Failed to send PAIR_CONNECTED push to partner:", err);
+      }
+    }
+
     return {
       token,
       pairId: pair.id,

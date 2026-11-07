@@ -53,6 +53,23 @@ export class NotificationService {
     });
   }
 
+  async notifyPartnerJoined(
+    partnerId: string,
+    pairId: string,
+    partnerPublicKey: string,
+  ): Promise<void> {
+    const token = await this.getFCMToken(partnerId);
+    if (!token) return;
+
+    await this.sendDataMessage(token, {
+      type: "PAIR_CONNECTED",
+      title: "LoveLetter",
+      body: "Your partner has joined the pair!",
+      pairId,
+      partnerPublicKey,
+    });
+  }
+
   async notifyPartnerDisconnect(
     partnerId: string,
     pairId: string,
