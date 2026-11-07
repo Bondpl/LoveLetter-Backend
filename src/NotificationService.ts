@@ -15,6 +15,9 @@ export class NotificationService {
     const message = {
       data,
       token,
+      android: {
+        priority: "high" as const,
+      },
     };
 
     try {

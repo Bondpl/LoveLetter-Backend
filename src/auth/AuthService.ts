@@ -136,17 +136,9 @@ export class AuthService {
     }
 
     await this.notificationService.clearFCMToken(userId);
-    if (partnerId) {
-      await this.notificationService.clearFCMToken(partnerId);
-    }
 
     await this.authRepository.incrementTokenVersion(userId);
     await this.tokenCache.clearTokenVersion(userId);
-
-    if (partnerId) {
-      await this.authRepository.incrementTokenVersion(partnerId);
-      await this.tokenCache.clearTokenVersion(partnerId);
-    }
 
     if (this.drawingCache) {
       await this.drawingCache.clearDrawing(userId);
