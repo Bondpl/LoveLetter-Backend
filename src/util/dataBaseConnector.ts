@@ -14,8 +14,8 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: isRemoteDb ? { rejectUnauthorized: false } : false,
   max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 15000, // 15 seconds to allow Neon serverless cold starts
+  idleTimeoutMillis: 5000,
+  connectionTimeoutMillis: 15000,
 });
 
 pool.on("error", (err) => {
@@ -42,4 +42,3 @@ export async function withTransaction<T>(
     client.release();
   }
 }
-

@@ -24,9 +24,29 @@ export class CleanupService {
     const startTime = Date.now();
     console.log("[Cleanup] ================= START =================");
     try {
-      await this.cleanupPairs();
-      await this.cleanupDrawings();
-      await this.cleanupOrphanedUsers();
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await this.cleanupPairs();
+          await this.cleanupDrawings();
+          await this.cleanupOrphanedUsers();
+          break;
+        } catch (err: any) {
+          const isTransient =
+            err?.message?.includes("Connection terminated") ||
+            err?.message?.includes("timeout") ||
+            ["57P01", "08006", "08003"].includes(err?.code);
+
+          if (isTransient && attempt < maxAttempts) {
+            console.warn(
+              `[Cleanup] Transient DB connection error (attempt ${attempt}/${maxAttempts}): ${err.message}. Retrying in ${attempt * 2}s...`,
+            );
+            await new Promise((res) => setTimeout(res, attempt * 2000));
+            continue;
+          }
+          throw err;
+        }
+      }
 
       const durationMs = Date.now() - startTime;
       console.log(
