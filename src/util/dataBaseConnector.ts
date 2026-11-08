@@ -6,14 +6,16 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const useSsl = process.env.DATABASE_URL?.includes("sslmode=");
+const isRemoteDb =
+  process.env.DATABASE_URL?.includes("neon.tech") ||
+  process.env.DATABASE_URL?.includes("sslmode=");
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: useSsl ? { rejectUnauthorized: true } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  ssl: isRemoteDb ? { rejectUnauthorized: false } : false,
+  max: 10,
+  idleTimeoutMillis: 5000,
+  connectionTimeoutMillis: 15000,
 });
 
 pool.on("error", (err) => {
@@ -40,4 +42,3 @@ export async function withTransaction<T>(
     client.release();
   }
 }
-

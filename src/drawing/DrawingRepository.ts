@@ -1,10 +1,19 @@
 import { Pool } from "pg";
-import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { SignedUrl } from "../types/SignedUrl";
 import { Drawing } from "../types/Drawing";
-import { AppError } from "../util/appError";
+import { AppError, ErrorCode } from "../util/appError";
 import { s3Client as defaultS3Client } from "../util/s3Client";
+
+const MAX_DRAWING_SIZE_BYTES = process.env.MAX_DRAWING_SIZE_BYTES
+  ? parseInt(process.env.MAX_DRAWING_SIZE_BYTES, 10)
+  : 5 * 1024 * 1024; // Default 5 MB
 
 export class DrawingRepository {
   private pool: Pool;
@@ -22,7 +31,11 @@ export class DrawingRepository {
     );
 
     if (pairResult.rows.length === 0) {
-      throw new AppError("Sender is not in an active pair", 403);
+      throw new AppError(
+        ErrorCode.NOT_IN_PAIR,
+        "Sender is not in an active pair",
+        403,
+      );
     }
 
     const pairId = pairResult.rows[0].id;
@@ -45,26 +58,36 @@ export class DrawingRepository {
     senderId: string,
     fileKey: string,
     iv: string,
-  ): Promise<void> {
+  ): Promise<{ partnerId: string }> {
     const pairResult = await this.pool.query(
-      `SELECT id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
+      `SELECT id, user1_id, user2_id FROM pairs WHERE (user1_id = $1 OR user2_id = $1) AND user2_id IS NOT NULL AND is_active = TRUE LIMIT 1`,
       [senderId],
     );
 
     if (pairResult.rows.length === 0) {
-      throw new AppError("Sender is not in an active pair", 403);
+      throw new AppError(
+        ErrorCode.NOT_IN_PAIR,
+        "Sender is not in an active pair",
+        403,
+      );
     }
 
-    const pairId = pairResult.rows[0].id;
+    const { id: pairId, user1_id, user2_id } = pairResult.rows[0];
+    const partnerId = user1_id === senderId ? user2_id : user1_id;
 
     // Validate that the fileKey belongs to this pair's drawings directory
     if (!fileKey.startsWith(`drawings/${pairId}/`)) {
-      throw new AppError("Invalid file key for this pair", 400);
+      throw new AppError(
+        ErrorCode.INVALID_FILE_KEY,
+        "Invalid file key for this pair",
+        400,
+      );
     }
 
     // Verify that the object actually exists in S3 before inserting into database
+    let headResult;
     try {
-      await this.s3Client.send(
+      headResult = await this.s3Client.send(
         new HeadObjectCommand({
           Bucket: process.env.S3_BUCKET_NAME,
           Key: fileKey,
@@ -72,9 +95,38 @@ export class DrawingRepository {
       );
     } catch (err: any) {
       if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
-        throw new AppError("Uploaded file not found in storage", 400);
+        throw new AppError(
+          ErrorCode.FILE_NOT_FOUND,
+          "Uploaded file not found in storage",
+          400,
+        );
       }
       throw err;
+    }
+
+    // Verify file size limit (max 5 MB)
+    if (
+      headResult.ContentLength &&
+      headResult.ContentLength > MAX_DRAWING_SIZE_BYTES
+    ) {
+      try {
+        await this.s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: fileKey,
+          }),
+        );
+      } catch (deleteErr) {
+        console.error(
+          `Failed to delete oversized file ${fileKey} from S3:`,
+          deleteErr,
+        );
+      }
+      throw new AppError(
+        ErrorCode.FILE_TOO_LARGE,
+        `File size exceeds the allowed limit of ${Math.round(MAX_DRAWING_SIZE_BYTES / (1024 * 1024))} MB`,
+        400,
+      );
     }
 
     // Build public/endpoint URL compatible with both custom S3 endpoints (MinIO) and standard AWS S3
@@ -87,6 +139,8 @@ export class DrawingRepository {
        VALUES($1, $2, $3, NOW() + INTERVAL '3 days', $4)`,
       [pairId, senderId, permanentImageUrl, iv],
     );
+
+    return { partnerId };
   }
 
   async getLatestDrawing(myUserId: string): Promise<Drawing | null> {

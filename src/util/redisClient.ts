@@ -2,6 +2,8 @@ import rateLimit from "express-rate-limit";
 import { Drawing } from "../types/Drawing";
 import RedisStore from "rate-limit-redis";
 import Redis from "ioredis";
+import { ErrorCode } from "./appError";
+import { config } from "../config";
 
 export const redisClient = new Redis(
   process.env.REDIS_URL || "redis://localhost:6379",
@@ -10,9 +12,10 @@ redisClient.on("connect", () => console.log("Redis connected"));
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
 export const drawingLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 3,
+  windowMs: config.rateLimits.drawingWindowMs,
+  max: config.rateLimits.drawingMax,
   message: {
+    code: ErrorCode.RATE_LIMIT_EXCEEDED,
     error: "Rate limit exceeded. Try again in a minute.",
     status: 429,
   },
@@ -78,10 +81,11 @@ export class TokenCache {
 }
 
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+  windowMs: config.rateLimits.authWindowMs,
+  max: config.rateLimits.authMax,
   message: {
-    error: "Too many accounts created from this IP, please try again later.",
+    code: ErrorCode.RATE_LIMIT_EXCEEDED,
+    error: "Too many requests. Please try again in a minute.",
     status: 429,
   },
   standardHeaders: true,

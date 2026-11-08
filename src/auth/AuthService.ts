@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { AuthRepository } from "./AuthRepository";
 import { AnonymousAuthResponse, JoinPairResponse } from "../types/requests";
-import { AppError } from "../util/appError";
+import { AppError, ErrorCode } from "../util/appError";
 import { withTransaction } from "../util/dataBaseConnector";
 import { TokenCache, DrawingCache } from "../util/redisClient";
 import { NotificationService } from "../NotificationService";
@@ -23,7 +23,11 @@ export class AuthService {
   private async generateJwtToken(userId: string): Promise<string> {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
-      throw new Error("JWT_SECRET environment variable is not configured");
+      throw new AppError(
+        ErrorCode.INTERNAL_ERROR,
+        "JWT_SECRET environment variable is not configured",
+        500,
+      );
     }
     const tokenVersion = await this.getTokenVersion(userId);
     return jwt.sign({ userId, tokenVersion }, secret, { expiresIn: "10y" });
@@ -63,6 +67,7 @@ export class AuthService {
     }
 
     throw new AppError(
+      ErrorCode.PAIR_GENERATION_FAILED,
       "Failed to generate a unique pair code. Please try again.",
       500,
     );
@@ -76,11 +81,19 @@ export class AuthService {
     const pair = await this.authRepository.findPairByCode(pairCodeStr);
 
     if (!pair) {
-      throw new AppError("Invalid or expired pair code", 400);
+      throw new AppError(
+        ErrorCode.PAIR_NOT_FOUND,
+        "Invalid or expired pair code",
+        400,
+      );
     }
 
     if (pair.user2_id) {
-      throw new AppError("This pair is already full!", 403);
+      throw new AppError(
+        ErrorCode.PAIR_FULL,
+        "This pair is already full!",
+        403,
+      );
     }
 
     const userId = await withTransaction(async (tx) => {
@@ -94,6 +107,7 @@ export class AuthService {
 
       if (!joinedSuccessfully) {
         throw new AppError(
+          ErrorCode.PAIR_RACE_CONDITION,
           "The pair was filled a millisecond ago by someone else!",
           409,
         );
@@ -106,6 +120,18 @@ export class AuthService {
       pair.user1_id!,
     );
 
+    if (pair.user1_id) {
+      try {
+        await this.notificationService.notifyPartnerJoined(
+          pair.user1_id,
+          pair.id,
+          publicKey,
+        );
+      } catch (err) {
+        console.error("Failed to send PAIR_CONNECTED push to partner:", err);
+      }
+    }
+
     return {
       token,
       pairId: pair.id,
@@ -117,30 +143,20 @@ export class AuthService {
   async leavePair(userId: string): Promise<void> {
     const { partnerId, pairId } = await this.authRepository.leavePair(userId);
 
-    // Clear FCM tokens so old user rows don't receive stale notifications
-    await this.notificationService.clearFCMToken(userId);
-    if (partnerId) {
-      await this.notificationService.clearFCMToken(partnerId);
+    if (partnerId && pairId) {
+      await this.notificationService.notifyPartnerDisconnect(partnerId, pairId);
     }
 
-    // Invalidate JWT tokens so old credentials can no longer be used
+    await this.notificationService.clearFCMToken(userId);
+
     await this.authRepository.incrementTokenVersion(userId);
     await this.tokenCache.clearTokenVersion(userId);
-
-    if (partnerId) {
-      await this.authRepository.incrementTokenVersion(partnerId);
-      await this.tokenCache.clearTokenVersion(partnerId);
-    }
 
     if (this.drawingCache) {
       await this.drawingCache.clearDrawing(userId);
       if (partnerId) {
         await this.drawingCache.clearDrawing(partnerId);
       }
-    }
-
-    if (partnerId && pairId) {
-      await this.notificationService.notifyPartnerDisconnect(partnerId, pairId);
     }
   }
 
@@ -165,6 +181,6 @@ export class AuthService {
       partnerId!,
     );
 
-    return { isPaired: true, partnerPublicKey };
+    return { isPaired: true, partnerPublicKey, pairId: pair.id };
   }
 }

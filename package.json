@@ -7,7 +7,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch --env-file=.env.local src/index.ts",
     "typecheck": "tsc --noEmit",
-    "cleanup": "tsx --env-file=.env.local src/scripts/cleanupDrawings.ts"
+    "cleanup": "tsx --env-file=.env.local src/cleanup/cleanupDrawings.ts"
   },
   "private": true,
   "devDependencies": {

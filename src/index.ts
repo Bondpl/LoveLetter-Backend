@@ -1,5 +1,9 @@
 import "dotenv/config";
-import express, { type Request, type Response, type NextFunction } from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import helmet from "helmet";
 import { initializeApp, cert } from "firebase-admin/app";
 import { DrawingRepository } from "./drawing/DrawingRepository";
@@ -20,6 +24,8 @@ import { DrawingService } from "./drawing/DrawingService";
 import { AuthRepository } from "./auth/AuthRepository";
 import { AuthService } from "./auth/AuthService";
 import { CleanupService } from "./cleanup/CleanupService";
+import { AppError, ErrorCode } from "./util/appError";
+import { config } from "./config";
 
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not configured.");
@@ -51,7 +57,9 @@ app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     await redisClient.ping();
-    res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
+    res
+      .status(200)
+      .json({ status: "healthy", timestamp: new Date().toISOString() });
   } catch (err: any) {
     res.status(503).json({ status: "unhealthy", error: err.message });
   }
@@ -79,26 +87,33 @@ const authService = new AuthService(
 );
 const requireAuth = readyMiddleware(authService);
 
-// Automated in-app cleanup for expired drawings (PostgreSQL + S3) and stale pair codes
 const cleanupService = new CleanupService(pool, s3Client);
 cleanupService.startScheduler();
 
 app.post("/api/auth/anonymous", authLimiter, async (req, res) => {
-  const { publicKey } = req.body;
+  const { publicKey } = req.body ?? {};
   if (!publicKey) {
-    return res.status(400).json({ error: "publicKey is required", status: 400 });
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "publicKey is required",
+      400,
+    );
   }
   const result = await authService.createAnonymousUser(publicKey);
   res.status(200).json(result);
 });
 
 app.post("/api/pairs/join", authLimiter, async (req, res) => {
-  const { pairCode, publicKey } = req.body;
+  const { pairCode, publicKey } = req.body ?? {};
   if (!publicKey) {
-    return res.status(400).json({ error: "publicKey is required", status: 400 });
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "publicKey is required",
+      400,
+    );
   }
   if (!pairCode) {
-    return res.status(400).json({ error: "pairCode is required", status: 400 });
+    throw new AppError(ErrorCode.VALIDATION_ERROR, "pairCode is required", 400);
   }
 
   const result = await authService.joinPairWithCode(pairCode, publicKey);
@@ -128,10 +143,10 @@ app.post("/api/drawings/confirm", requireAuth, async (req, res) => {
   const { filekey, iv } = req.body ?? {};
 
   if (!filekey) {
-    return res.status(400).json({ error: "filekey is required", status: 400 });
+    throw new AppError(ErrorCode.VALIDATION_ERROR, "filekey is required", 400);
   }
   if (!iv) {
-    return res.status(400).json({ error: "iv is required", status: 400 });
+    throw new AppError(ErrorCode.VALIDATION_ERROR, "iv is required", 400);
   }
 
   await drawingService.confirmUploadDrawingAndNotify(senderId, filekey, iv);
@@ -145,12 +160,12 @@ app.get("/api/drawings", requireAuth, async (req, res) => {
   if (drawingUrl) {
     return res.status(200).json({ drawingUrl });
   }
-  res.status(404).json({ error: "No new drawings found", status: 404 });
+  throw new AppError(ErrorCode.DRAWING_NOT_FOUND, "No new drawings found", 404);
 });
 
 app.post("/api/fcm-token", requireAuth, async (req, res) => {
   const userId = req.userId!;
-  const { fcmToken } = req.body as FcmTokenBody;
+  const { fcmToken } = (req.body ?? {}) as FcmTokenBody;
 
   await drawingService.saveFcmToken({ userId, token: fcmToken });
   res.status(200).json({ message: "FCM token saved successfully" });
@@ -161,6 +176,27 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     return next(err);
   }
 
+  if (err instanceof AppError) {
+    return res.status(err.status).json({
+      code: err.code,
+      error: err.message,
+      status: err.status,
+      ...(err.details ? { details: err.details } : {}),
+    });
+  }
+
+  if (
+    err instanceof SyntaxError &&
+    "body" in err &&
+    (err as any).status === 400
+  ) {
+    return res.status(400).json({
+      code: ErrorCode.VALIDATION_ERROR,
+      error: "Malformed JSON payload in request body",
+      status: 400,
+    });
+  }
+
   const status =
     typeof err.status === "number" && err.status >= 400 && err.status < 600
       ? err.status
@@ -169,16 +205,18 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (status >= 500) {
     console.error(`[${new Date().toISOString()}] Internal Server Error:`, err);
     const message =
-      process.env.NODE_ENV === "production"
+      config.isProduction
         ? "Internal server error"
         : err.message || "Internal server error";
     return res.status(status).json({
+      code: ErrorCode.INTERNAL_ERROR,
       error: message,
       status,
     });
   }
 
   return res.status(status).json({
+    code: ErrorCode.INTERNAL_ERROR,
     error: err.message || "An unexpected error occurred",
     status,
   });
@@ -195,7 +233,6 @@ const gracefulShutdown = async (signal: string) => {
   isShuttingDown = true;
   console.log(`\nReceived ${signal}. Gracefully shutting down...`);
 
-  // Stop automated cleanup scheduler
   cleanupService.stopScheduler();
 
   const forceExitTimeout = setTimeout(() => {

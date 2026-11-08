@@ -15,6 +15,9 @@ export class NotificationService {
     const message = {
       data,
       token,
+      android: {
+        priority: "high" as const,
+      },
     };
 
     try {
@@ -50,6 +53,23 @@ export class NotificationService {
     });
   }
 
+  async notifyPartnerJoined(
+    partnerId: string,
+    pairId: string,
+    partnerPublicKey: string,
+  ): Promise<void> {
+    const token = await this.getFCMToken(partnerId);
+    if (!token) return;
+
+    await this.sendDataMessage(token, {
+      type: "PAIR_CONNECTED",
+      title: "LoveLetter",
+      body: "Your partner has joined the pair!",
+      pairId,
+      partnerPublicKey,
+    });
+  }
+
   async notifyPartnerDisconnect(
     partnerId: string,
     pairId: string,
@@ -66,7 +86,6 @@ export class NotificationService {
   }
 
   async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
-    // Clear this FCM token from any other user rows to prevent duplicate notifications
     await this.pool.query(
       `UPDATE users SET fcm_token = NULL WHERE fcm_token = $1 AND id != $2`,
       [fcmToken, userId],
@@ -87,9 +106,8 @@ export class NotificationService {
   }
 
   async clearFCMToken(userId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE users SET fcm_token = NULL WHERE id = $1`,
-      [userId],
-    );
+    await this.pool.query(`UPDATE users SET fcm_token = NULL WHERE id = $1`, [
+      userId,
+    ]);
   }
 }
