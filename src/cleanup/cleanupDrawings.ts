@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { pool } from "../util/dataBaseConnector";
 import { s3Client } from "../util/s3Client";
-import { CleanupService } from "../cleanup/CleanupService";
+import { CleanupService } from "./CleanupService";
 
 async function main() {
   console.log("Running manual cleanup via CLI...");
