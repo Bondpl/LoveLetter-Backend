@@ -156,12 +156,12 @@ export class CleanupService {
       `[Cleanup] Starting in-app automated cleanup scheduler (interval: ${intervalMs / 1000 / 60 / 60}h)`,
     );
 
-    // Initial run after 5 seconds to let server start up smoothly
+    // Initial run after 15 seconds to let server start up smoothly and DB wake up
     setTimeout(() => {
       this.runCleanup().catch((err) =>
         console.error("[Cleanup] Error in initial cleanup run:", err),
       );
-    }, 5000).unref();
+    }, 15000).unref();
 
     this.intervalTimer = setInterval(() => {
       this.runCleanup().catch((err) =>
