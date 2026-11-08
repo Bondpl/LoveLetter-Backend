@@ -1,6 +1,8 @@
 import { Pool } from "pg";
 import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
+const DEFAULT_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
 export class CleanupService {
   private intervalTimer: NodeJS.Timeout | null = null;
   private isCleaning = false;
@@ -109,13 +111,32 @@ export class CleanupService {
 
       // 5. Delete successfully processed records from PostgreSQL
       const idsToDelete = itemsToDelete.map((item) => item.id);
-      await this.pool.query(
-        `DELETE FROM drawings WHERE id = ANY($1::int[])`,
-        [idsToDelete],
-      );
+      await this.pool.query(`DELETE FROM drawings WHERE id = ANY($1::int[])`, [
+        idsToDelete,
+      ]);
       console.log(
         `[Cleanup] Deleted ${idsToDelete.length} drawing records from database.`,
       );
+
+      // 6. Cleanup orphaned users (> 24 hours without any pairs or drawings)
+      const deletedUsersResult = await this.pool.query(
+        `DELETE FROM users 
+         WHERE created_at < NOW() - INTERVAL '24 hours'
+           AND NOT EXISTS (
+             SELECT 1 FROM pairs 
+             WHERE pairs.user1_id = users.id OR pairs.user2_id = users.id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM drawings 
+             WHERE drawings.sender_id = users.id
+           )
+         RETURNING id`,
+      );
+      if (deletedUsersResult.rows.length > 0) {
+        console.log(
+          `[Cleanup] Deleted ${deletedUsersResult.rows.length} orphaned user records from database.`,
+        );
+      }
     } catch (error) {
       console.error(
         "[Cleanup] Error during automated cleanup execution:",
@@ -126,13 +147,13 @@ export class CleanupService {
     }
   }
 
-  startScheduler(intervalMs = 30 * 60 * 1000): void {
+  startScheduler(intervalMs = DEFAULT_INTERVAL_MS): void {
     if (this.intervalTimer) {
       return;
     }
 
     console.log(
-      `[Cleanup] Starting in-app automated cleanup scheduler (interval: ${intervalMs / 1000 / 60}m)`,
+      `[Cleanup] Starting in-app automated cleanup scheduler (interval: ${intervalMs / 1000 / 60 / 60}h)`,
     );
 
     // Initial run after 5 seconds to let server start up smoothly

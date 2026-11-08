@@ -31,3 +31,4 @@ CREATE INDEX IF NOT EXISTS idx_pairs_code_lookup ON pairs(pair_code) WHERE is_ac
 CREATE INDEX IF NOT EXISTS idx_pairs_cleanup ON pairs(created_at) WHERE user2_id IS NULL AND pair_code IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_pairs_user1_active ON pairs(user1_id) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_pairs_user2_active ON pairs(user2_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
