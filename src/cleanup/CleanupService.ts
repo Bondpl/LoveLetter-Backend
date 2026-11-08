@@ -21,122 +21,17 @@ export class CleanupService {
     }
 
     this.isCleaning = true;
+    const startTime = Date.now();
+    console.log("[Cleanup] ================= START =================");
     try {
-      // 1. Cleanup expired pair codes (> 10 minutes)
-      const pairsResult = await this.pool.query(
-        `UPDATE pairs 
-         SET pair_code = NULL, is_active = FALSE 
-         WHERE user2_id IS NULL 
-           AND pair_code IS NOT NULL 
-           AND created_at < NOW() - INTERVAL '10 minutes'
-         RETURNING id`,
-      );
-      if (pairsResult.rows.length > 0) {
-        console.log(
-          `[Cleanup] Cleaned up ${pairsResult.rows.length} expired pair codes.`,
-        );
-      }
+      await this.cleanupPairs();
+      await this.cleanupDrawings();
+      await this.cleanupOrphanedUsers();
 
-      const deletedPairs = await this.pool.query(
-        `DELETE FROM pairs 
-         WHERE is_active = FALSE 
-           AND created_at < NOW() - INTERVAL '1 hour'
-           AND (
-             user2_id IS NULL 
-             OR NOT EXISTS (SELECT 1 FROM drawings WHERE drawings.pair_id = pairs.id)
-           )
-         RETURNING id`,
-      );
-      if (deletedPairs.rows.length > 0) {
-        console.log(
-          `[Cleanup] Deleted ${deletedPairs.rows.length} inactive pairs.`,
-        );
-      }
-
-      // 2. Cleanup expired drawings: fetch expired records first
-      const selectResult = await this.pool.query(
-        `SELECT id, image_url FROM drawings 
-         WHERE expires_at <= NOW() 
-         LIMIT 1000`,
-      );
-
-      const expiredDrawings = selectResult.rows;
-      if (expiredDrawings.length === 0) {
-        return;
-      }
-
+      const durationMs = Date.now() - startTime;
       console.log(
-        `[Cleanup] Found ${expiredDrawings.length} expired drawings to delete.`,
+        `[Cleanup] ================= END (completed in ${durationMs}ms) =================`,
       );
-
-      // 3. Extract S3 keys
-      const itemsToDelete = expiredDrawings.map((row) => {
-        const url = row.image_url as string;
-        const drawingsIndex = url.lastIndexOf("drawings/");
-        const key = drawingsIndex !== -1 ? url.substring(drawingsIndex) : null;
-        return { id: row.id as number, key };
-      });
-
-      const keysToDelete = itemsToDelete
-        .map((item) => item.key)
-        .filter((key): key is string => Boolean(key));
-
-      const bucketName = process.env.S3_BUCKET_NAME;
-
-      // 4. Delete from S3 first so we don't orphan files if S3 fails
-      if (keysToDelete.length > 0 && bucketName) {
-        const CHUNK_SIZE = 1000;
-        for (let i = 0; i < keysToDelete.length; i += CHUNK_SIZE) {
-          const chunk = keysToDelete.slice(i, i + CHUNK_SIZE);
-          await this.s3Client.send(
-            new DeleteObjectsCommand({
-              Bucket: bucketName,
-              Delete: {
-                Objects: chunk.map((Key) => ({ Key })),
-              },
-            }),
-          );
-          console.log(
-            `[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`,
-          );
-        }
-        console.log(
-          `[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`,
-        );
-      } else if (!bucketName && keysToDelete.length > 0) {
-        console.warn(
-          "[Cleanup] S3_BUCKET_NAME is not set. Skipping S3 deletion.",
-        );
-      }
-
-      // 5. Delete successfully processed records from PostgreSQL
-      const idsToDelete = itemsToDelete.map((item) => item.id);
-      await this.pool.query(`DELETE FROM drawings WHERE id = ANY($1::int[])`, [
-        idsToDelete,
-      ]);
-      console.log(
-        `[Cleanup] Deleted ${idsToDelete.length} drawing records from database.`,
-      );
-
-      // 6. Cleanup orphaned users (> 24 hours without any pairs or drawings)
-      const deletedUsersResult = await this.pool.query(
-        `DELETE FROM users 
-         WHERE created_at < NOW() - INTERVAL '24 hours'
-           AND NOT EXISTS (
-             SELECT 1 FROM pairs 
-             WHERE pairs.user1_id = users.id OR pairs.user2_id = users.id
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM drawings 
-             WHERE drawings.sender_id = users.id
-           )
-         RETURNING id`,
-      );
-      if (deletedUsersResult.rows.length > 0) {
-        console.log(
-          `[Cleanup] Deleted ${deletedUsersResult.rows.length} orphaned user records from database.`,
-        );
-      }
     } catch (error) {
       console.error(
         "[Cleanup] Error during automated cleanup execution:",
@@ -144,6 +39,122 @@ export class CleanupService {
       );
     } finally {
       this.isCleaning = false;
+    }
+  }
+
+  private async cleanupPairs(): Promise<void> {
+    const pairsResult = await this.pool.query(
+      `UPDATE pairs 
+       SET pair_code = NULL, is_active = FALSE 
+       WHERE user2_id IS NULL 
+         AND pair_code IS NOT NULL 
+         AND created_at < NOW() - INTERVAL '10 minutes'
+       RETURNING id`,
+    );
+    if (pairsResult.rows.length > 0) {
+      console.log(
+        `[Cleanup] Cleaned up ${pairsResult.rows.length} expired pair codes.`,
+      );
+    }
+
+    const deletedPairs = await this.pool.query(
+      `DELETE FROM pairs 
+       WHERE is_active = FALSE 
+         AND created_at < NOW() - INTERVAL '1 hour'
+         AND (
+           user2_id IS NULL 
+           OR NOT EXISTS (SELECT 1 FROM drawings WHERE drawings.pair_id = pairs.id)
+         )
+       RETURNING id`,
+    );
+    if (deletedPairs.rows.length > 0) {
+      console.log(
+        `[Cleanup] Deleted ${deletedPairs.rows.length} inactive pairs.`,
+      );
+    }
+  }
+
+  private async cleanupDrawings(): Promise<void> {
+    const selectResult = await this.pool.query(
+      `SELECT id, image_url FROM drawings 
+       WHERE expires_at <= NOW() 
+       LIMIT 1000`,
+    );
+
+    const expiredDrawings = selectResult.rows;
+    if (expiredDrawings.length === 0) {
+      return;
+    }
+
+    console.log(
+      `[Cleanup] Found ${expiredDrawings.length} expired drawings to delete.`,
+    );
+
+    const itemsToDelete = expiredDrawings.map((row) => {
+      const url = row.image_url as string;
+      const drawingsIndex = url.lastIndexOf("drawings/");
+      const key = drawingsIndex !== -1 ? url.substring(drawingsIndex) : null;
+      return { id: row.id as number, key };
+    });
+
+    const keysToDelete = itemsToDelete
+      .map((item) => item.key)
+      .filter((key): key is string => Boolean(key));
+
+    const bucketName = process.env.S3_BUCKET_NAME;
+
+    if (keysToDelete.length > 0 && bucketName) {
+      const CHUNK_SIZE = 1000;
+      for (let i = 0; i < keysToDelete.length; i += CHUNK_SIZE) {
+        const chunk = keysToDelete.slice(i, i + CHUNK_SIZE);
+        await this.s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: chunk.map((Key) => ({ Key })),
+            },
+          }),
+        );
+        console.log(
+          `[Cleanup] Deleted batch of ${chunk.length} objects from S3 storage.`,
+        );
+      }
+      console.log(
+        `[Cleanup] Successfully purged ${keysToDelete.length} files from S3.`,
+      );
+    } else if (!bucketName && keysToDelete.length > 0) {
+      console.warn(
+        "[Cleanup] S3_BUCKET_NAME is not set. Skipping S3 deletion.",
+      );
+    }
+
+    const idsToDelete = itemsToDelete.map((item) => item.id);
+    await this.pool.query(`DELETE FROM drawings WHERE id = ANY($1::int[])`, [
+      idsToDelete,
+    ]);
+    console.log(
+      `[Cleanup] Deleted ${idsToDelete.length} drawing records from database.`,
+    );
+  }
+
+  private async cleanupOrphanedUsers(): Promise<void> {
+    const deletedUsersResult = await this.pool.query(
+      `DELETE FROM users 
+       WHERE created_at < NOW() - INTERVAL '24 hours'
+         AND NOT EXISTS (
+           SELECT 1 FROM pairs 
+           WHERE pairs.user1_id = users.id OR pairs.user2_id = users.id
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM drawings 
+           WHERE drawings.sender_id = users.id
+         )
+       RETURNING id`,
+    );
+    if (deletedUsersResult.rows.length > 0) {
+      console.log(
+        `[Cleanup] Deleted ${deletedUsersResult.rows.length} orphaned user records from database.`,
+      );
     }
   }
 
